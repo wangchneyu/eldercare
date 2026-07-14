@@ -6,9 +6,9 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
 
 @SpringBootApplication
 @EnableDiscoveryClient
-public class ServiceAlertApplication { // ⚠️ 改类名
+public class ServiceAlertApplication {
     public static void main(String[] args) {
         SpringApplication.run(ServiceAlertApplication.class, args);
-        System.out.println("====== Service Sos 启动成功 ======"); // ⚠️ 改打印语
+        System.out.println("====== Service Alert 启动成功 ======");
     }
 }
