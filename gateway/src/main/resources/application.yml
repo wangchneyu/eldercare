@@ -1,10 +1,79 @@
 server:
-  port: 9999 # 网关入口端口（若冲突可改为 9999）
+  port: 9999
 
 spring:
   application:
-    name: gateway # 注册到 Nacos 中的名字
+    name: gateway
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848 # Nacos 地址
+        server-addr: 127.0.0.1:8848
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      routes:
+        # ==================== HTTP 路由 (5 组) ====================
+
+        # 鉴权服务 — 登录/注册/刷新 Token
+        - id: route-auth
+          uri: lb://service-auth
+          predicates:
+            - Path=/auth/**
+
+        # 管理后台 — 运营管理
+        - id: route-admin
+          uri: lb://service-operation
+          predicates:
+            - Path=/admin/**
+
+        # 服务端 — IoT 设备管理
+        - id: route-server
+          uri: lb://service-iot
+          predicates:
+            - Path=/server/**
+
+        # 老人端 — 体征/照护/AI
+        - id: route-elderly
+          uri: lb://service-care
+          predicates:
+            - Path=/elderly/**
+
+        # 家属端 — 关怀/通知
+        - id: route-family
+          uri: lb://service-family
+          predicates:
+            - Path=/family/**
+
+        # ==================== WebSocket 路由 (2 组) ====================
+
+        # 告警实时推送（SOS 状态变更）
+        - id: ws-alert
+          uri: lb:ws://service-alert
+          predicates:
+            - Path=/ws/alert/**
+
+        # 家属生活推送（日报/活动通知）
+        - id: ws-family-living
+          uri: lb:ws://service-family
+          predicates:
+            - Path=/ws/family-living/**
+
+    sentinel:
+      transport:
+        dashboard: 127.0.0.1:8080
+      eager: true
+
+# ==================== 安全配置 ====================
+eldercare:
+  security:
+    enabled: true
+    secret: ElderCarePlatform2024SecretKey!@#$%^
+    access-token-expiration: 7200
+    refresh-token-expiration: 604800
+
+# ==================== 日志 ====================
+logging:
+  level:
+    com.eldercare.gateway: DEBUG
+    com.alibaba.csp.sentinel: INFO

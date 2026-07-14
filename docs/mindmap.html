@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>eldercare-platform 基础架构与技术栈</title>
+<style>
+  :root {
+    --bg: #0f1119;
+    --surface: #161822;
+    --border: #252836;
+    --text: #c8ccd8;
+    --text-dim: #6b7084;
+    --accent: #4fc3f7;
+    --accent2: #7c4dff;
+    --accent3: #69f0ae;
+    --accent4: #ffab40;
+    --accent5: #ff5252;
+    --accent6: #40c4ff;
+    --accent7: #ea80fc;
+    --glow-1: rgba(79,195,247,0.15);
+    --glow-2: rgba(124,77,255,0.15);
+    --glow-3: rgba(105,240,174,0.15);
+    --font-display: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
+    --font-mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-display);
+    overflow: hidden;
+    height: 100vh;
+    width: 100vw;
+    user-select: none;
+  }
+
+  /* ---- Background Texture ---- */
+  body::before {
+    content: '';
+    position: fixed;
+    top:0; left:0; right:0; bottom:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 50%, rgba(79,195,247,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 50% at 80% 30%, rgba(124,77,255,0.04) 0%, transparent 70%),
+      radial-gradient(ellipse 50% 40% at 60% 80%, rgba(105,240,174,0.03) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- Grid Dots ---- */
+  .grid-bg {
+    position: fixed;
+    top:0; left:0; right:0; bottom:0;
+    background-image: radial-gradient(circle, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ---- Header ---- */
+  .header {
+    position: fixed;
+    top:0; left:0; right:0;
+    height: 56px;
+    background: rgba(22,24,34,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    display:flex;
+    align-items:center;
+    padding: 0 28px;
+    z-index: 100;
+    gap: 16px;
+  }
+  .header .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot.d1 { background: var(--accent5); }
+  .dot.d2 { background: var(--accent4); }
+  .dot.d3 { background: var(--accent3); }
+  .header h1 {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: linear-gradient(135deg, var(--accent), var(--accent6));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .header .subtitle {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-left: auto;
+    letter-spacing: 1px;
+  }
+
+  /* ---- Toolbar ---- */
+  .toolbar {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display:flex;
+    gap: 8px;
+    z-index: 100;
+    background: rgba(22,24,34,0.85);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border);
+    border-radius: 40px;
+    padding: 6px 8px;
+  }
+  .toolbar button {
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    padding: 10px 18px;
+    border-radius: 32px;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: var(--font-display);
+    letter-spacing: 0.5px;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+  }
+  .toolbar button:hover {
+    color: var(--text);
+    background: rgba(255,255,255,0.06);
+  }
+  .toolbar button.active {
+    color: var(--accent);
+    background: rgba(79,195,247,0.12);
+  }
+  .toolbar .divider {
+    width: 1px;
+    background: var(--border);
+    margin: 4px 4px;
+    border-radius: 1px;
+  }
+
+  /* ---- Map Container ---- */
+  .map-container {
+    position: fixed;
+    top: 56px;
+    left:0; right:0; bottom:0;
+    z-index: 1;
+    cursor: grab;
+  }
+  .map-container:active {
+    cursor: grabbing;
+  }
+  .map-container.panning { cursor: grabbing; }
+
+  /* ---- SVG Layer ---- */
+  .lines-layer {
+    position: absolute;
+    top:0; left:0;
+    width:100%; height:100%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  /* ---- Nodes Layer ---- */
+  .nodes-layer {
+    position: absolute;
+    top:0; left:0;
+    z-index: 2;
+    transform-origin: 0 0;
+  }
+
+  /* ---- Node Card ---- */
+  .node {
+    position: absolute;
+    cursor: pointer;
+    transition: transform 0.3s cubic-bezier(0.22, 0.61, 0.36, 1), opacity 0.3s ease;
+    white-space: nowrap;
+  }
+  .node:hover { z-index: 10; }
+
+  .node-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 20px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+    transition: all 0.3s cubic-bezier(0.22, 0.61, 0.36, 1);
+    position: relative;
+    overflow: hidden;
+  }
+  .node-card::before {
+    content: '';
+    position: absolute;
+    top:0; left:0; right:0;
+    height: 2px;
+    border-radius: 2px 2px 0 0;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .node:hover .node-card {
+    border-color: rgba(255,255,255,0.15);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.45);
+    transform: translateY(-2px);
+  }
+
+  /* ---- Node Level Styles ---- */
+  .node.level-0 .node-card {
+    background: linear-gradient(135deg, rgba(79,195,247,0.12), rgba(124,77,255,0.08));
+    border-color: rgba(79,195,247,0.3);
+    padding: 20px 32px;
+    border-radius: 16px;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    box-shadow: 0 0 60px var(--glow-1), 0 4px 32px rgba(0,0,0,0.35);
+  }
+  .node.level-0:hover .node-card {
+    box-shadow: 0 0 80px var(--glow-1), 0 8px 48px rgba(0,0,0,0.5);
+  }
+  .node.level-0 .node-card::before {
+    opacity: 1;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    height: 3px;
+  }
+  .node.level-0 .label { color: #e8eaef; }
+
+  .node.level-1 .node-card {
+    background: rgba(22,24,34,0.95);
+    border-color: var(--border);
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-size: 15px;
+    font-weight: 600;
+    min-width: 180px;
+    text-align: center;
+  }
+  .node.level-1:hover .node-card {
+    border-color: rgba(79,195,247,0.25);
+  }
+  .node.level-1 .node-card::before {
+    background: var(--accent);
+  }
+  .node.level-1:hover .node-card::before { opacity: 1; }
+
+  .node.level-2 .node-card {
+    background: rgba(22,24,34,0.9);
+    border-color: var(--border);
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+  }
+  .node.level-2:hover .node-card {
+    border-color: rgba(124,77,255,0.25);
+  }
+  .node.level-2 .node-card::before {
+    background: var(--accent2);
+  }
+  .node.level-2:hover .node-card::before { opacity: 1; }
+
+  .node.level-3 .node-card {
+    background: rgba(22,24,34,0.85);
+    border-color: var(--border);
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-dim);
+  }
+  .node.level-3:hover .node-card {
+    border-color: rgba(105,240,174,0.2);
+    color: var(--text);
+  }
+  .node.level-3 .node-card::before {
+    background: var(--accent3);
+  }
+  .node.level-3:hover .node-card::before { opacity: 1; }
+
+  .label { position: relative; z-index: 1; }
+
+  /* ---- Collapse Indicator ---- */
+  .collapse-indicator {
+    display: inline-block;
+    width: 18px;
+    height: 18px;
+    line-height: 18px;
+    text-align: center;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.06);
+    font-size: 10px;
+    margin-left: 6px;
+    transition: transform 0.3s ease;
+    vertical-align: middle;
+    color: var(--text-dim);
+  }
+  .node.collapsed .collapse-indicator {
+    transform: rotate(-90deg);
+  }
+  .node.leaf .collapse-indicator { display: none; }
+
+  /* ---- Hidden children ---- */
+  .node.hidden {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+  }
+
+  /* ---- Tooltip ---- */
+  .tooltip {
+    position: fixed;
+    background: rgba(22,24,34,0.97);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    font-size: 12px;
+    color: var(--text);
+    pointer-events: none;
+    z-index: 200;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    max-width: 300px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+  }
+  .tooltip.visible { opacity: 1; }
+
+  /* ---- Legend ---- */
+  .legend {
+    position: fixed;
+    right: 24px;
+    top: 80px;
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .legend-dot {
+    width: 8px; height: 8px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .legend-dot.l0 { background: var(--accent); box-shadow: 0 0 8px rgba(79,195,247,0.5); }
+  .legend-dot.l1 { background: var(--accent2); box-shadow: 0 0 6px rgba(124,77,255,0.4); }
+  .legend-dot.l2 { background: var(--accent3); box-shadow: 0 0 6px rgba(105,240,174,0.4); }
+
+  /* ---- Responsive ---- */
+  @media (max-width: 1024px) {
+    .header h1 { font-size: 15px; }
+    .node.level-0 .node-card { font-size: 16px; padding: 14px 24px; }
+    .node.level-1 .node-card { font-size: 13px; padding: 10px 14px; }
+    .node.level-2 .node-card { font-size: 11px; padding: 8px 10px; }
+    .node.level-3 .node-card { font-size: 10px; padding: 6px 8px; }
+    .toolbar button { padding: 8px 12px; font-size: 11px; }
+    .legend { right: 8px; top: 70px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="grid-bg"></div>
+
+<header class="header">
+  <span class="dot d1"></span>
+  <span class="dot d2"></span>
+  <span class="dot d3"></span>
+  <h1>eldercare-platform · 基础架构与技术栈</h1>
+  <span class="subtitle">SPRING CLOUD ALIBABA</span>
+</header>
+
+<div class="legend">
+  <div class="legend-item"><span class="legend-dot l0"></span> 核心模块</div>
+  <div class="legend-item"><span class="legend-dot l1"></span> 子模块</div>
+  <div class="legend-item"><span class="legend-dot l2"></span> 功能点</div>
+</div>
+
+<div class="map-container" id="mapContainer">
+  <svg class="lines-layer" id="linesLayer"></svg>
+  <div class="nodes-layer" id="nodesLayer"></div>
+</div>
+
+<div class="toolbar" id="toolbar">
+  <button id="btnExpand" class="active" title="展开全部">展开全部</button>
+  <button id="btnCollapse" title="收起">收起至一级</button>
+  <span class="divider"></span>
+  <button id="btnReset" title="重置视图">重置视图</button>
+  <span class="divider"></span>
+  <span style="color:var(--text-dim);font-size:11px;padding:10px 8px;">拖拽平移 · 滚轮缩放 · 点击展开</span>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+
+<script>
+(function() {
+  // ---- DATA ----
+  const tree = {
+    id: 'root',
+    label: 'eldercare-platform\n基础架构',
+    children: [
+      {
+        id: 'overview',
+        label: '项目概述',
+        children: [
+          { id:'ov1', label: '智慧养老微服务平台', children:[] },
+          { id:'ov2', label: 'JDK 17 + Spring Boot 3.2.4', children:[] },
+          { id:'ov3', label: 'Spring Cloud 2023.0.1', children:[] },
+          { id:'ov4', label: 'Spring Cloud Alibaba 2023.0.1.0', children:[] },
+          { id:'ov5', label: 'Maven 多模块聚合工程', children:[] },
+        ]
+      },
+      {
+        id: 'modules',
+        label: '项目模块架构',
+        children: [
+          {
+            id: 'gateway',
+            label: 'gateway  API网关 :9999',
+            children: [
+              { id:'gw1', label: 'Spring Cloud Gateway (WebFlux)', children:[] },
+              { id:'gw2', label: 'JWT 全局鉴权过滤器', children:[] },
+              { id:'gw3', label: 'Sentinel 网关限流 QPS=100', children:[] },
+              { id:'gw4', label: 'WebSocket 连接限制', children:[] },
+              { id:'gw5', label: 'CORS 跨域配置', children:[] },
+            ]
+          },
+          {
+            id: 'common',
+            label: 'common 通用模块',
+            children: [
+              {
+                id:'common-core',
+                label: 'common-core  核心模块',
+                children: [
+                  { id:'cc1', label: 'R<T> 统一响应体（含traceId）', children:[] },
+                  { id:'cc2', label: 'GlobalExceptionHandler 全局异常处理', children:[] },
+                  { id:'cc3', label: 'IErrorCode / SystemErrorCode 错误码体系', children:[] },
+                  { id:'cc4', label: 'BaseEntity 基础实体', children:[] },
+                  { id:'cc5', label: 'TraceContext MDC 链路追踪', children:[] },
+                  { id:'cc6', label: 'DesensitizeUtil 数据脱敏', children:[] },
+                ]
+              },
+              {
+                id:'common-security',
+                label: 'common-security  安全模块',
+                children: [
+                  { id:'cs1', label: 'JwtTokenProvider HMAC-SHA256', children:[] },
+                  { id:'cs2', label: 'JwtAuthenticationFilter Servlet过滤器', children:[] },
+                  { id:'cs3', label: '@RequireRole 角色鉴权 AOP', children:[] },
+                  { id:'cs4', label: 'SecurityContextHolder (ThreadLocal)', children:[] },
+                  { id:'cs5', label: 'FeignAuthRequestInterceptor Feign拦截器', children:[] },
+                  { id:'cs6', label: 'LoginUser / UserRole 用户角色模型', children:[] },
+                ]
+              },
+              { id:'common-file', label: 'common-file  文件存储', children:[] },
+              { id:'common-notif', label: 'common-notification  消息通知', children:[] },
+              { id:'common-audit', label: 'common-audit  审计日志', children:[] },
+            ]
+          },
+          {
+            id: 'services',
+            label: '业务服务（8个微服务）',
+            children: [
+              { id:'svc-auth', label: 'service-auth  认证服务 :8090', children:[] },
+              { id:'svc-care', label: 'service-care  护理服务 :8083', children:[] },
+              { id:'svc-vital', label: 'service-vital  体征监测 :8091', children:[] },
+              { id:'svc-family', label: 'service-family  家属端 :8092', children:[] },
+              { id:'svc-iot', label: 'service-iot  设备管理 :8094', children:[] },
+              { id:'svc-alert', label: 'service-alert  告警推送 :8095 (WS)', children:[] },
+              { id:'svc-ai', label: 'service-ai  AI服务 :8093', children:[] },
+              { id:'svc-op', label: 'service-operation  运营后台 :8087', children:[] },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'common-usage',
+        label: '公共模块使用指南',
+        children: [
+          {
+            id: 'usage-r',
+            label: 'R<T> 统一响应',
+            children: [
+              { id:'ur1', label: 'R.ok(data) — 成功返回', children:[] },
+              { id:'ur2', label: 'R.fail(errorCode) — 失败返回', children:[] },
+              { id:'ur3', label: '自动包装 traceId', children:[] },
+              { id:'ur4', label: 'Controller 层直接返回', children:[] },
+            ]
+          },
+          {
+            id: 'usage-exception',
+            label: '全局异常处理',
+            children: [
+              { id:'ue1', label: 'throw new BizException(errorCode)', children:[] },
+              { id:'ue2', label: '传入 IErrorCode 枚举', children:[] },
+              { id:'ue3', label: 'GlobalExceptionHandler 自动捕获并转换', children:[] },
+            ]
+          },
+          {
+            id: 'usage-jwt',
+            label: 'JWT 认证',
+            children: [
+              { id:'uj1', label: '配置 secret / 过期时间', children:[] },
+              { id:'uj2', label: '登录时生成 token 返回', children:[] },
+              { id:'uj3', label: '请求头: Authorization: Bearer xxx', children:[] },
+              { id:'uj4', label: 'Gateway 自动校验', children:[] },
+            ]
+          },
+          {
+            id: 'usage-role',
+            label: '角色鉴权',
+            children: [
+              { id:'uro1', label: '@RequireRole({ADMIN, OPERATOR}) 注解', children:[] },
+              { id:'uro2', label: 'AOP 自动拦截校验', children:[] },
+              { id:'uro3', label: 'SecurityContextHolder.get() 获取当前用户', children:[] },
+            ]
+          },
+          {
+            id: 'usage-feign',
+            label: 'Feign 服务间调用',
+            children: [
+              { id:'uf1', label: '@FeignClient 声明接口即可', children:[] },
+              { id:'uf2', label: 'FeignAuthRequestInterceptor 自动携带 token', children:[] },
+              { id:'uf3', label: '自动传播 traceId', children:[] },
+            ]
+          },
+          {
+            id: 'usage-trace',
+            label: '链路追踪',
+            children: [
+              { id:'ut1', label: 'TraceContext.generate() 生成 traceId', children:[] },
+              { id:'ut2', label: 'MDC 自动写入日志', children:[] },
+              { id:'ut3', label: '跨服务 Feign 调用自动传递', children:[] },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'nacos',
+        label: 'Nacos 使用指南',
+        children: [
+          {
+            id: 'nacos-registry',
+            label: '服务注册与发现',
+            children: [
+              { id:'nr1', label: '引入 nacos-discovery 依赖', children:[] },
+              { id:'nr2', label: '配置 server-addr: 127.0.0.1:8848', children:[] },
+              { id:'nr3', label: '@EnableDiscoveryClient 注解', children:[] },
+              { id:'nr4', label: 'spring.application.name 即服务名', children:[] },
+            ]
+          },
+          {
+            id: 'nacos-config',
+            label: '配置中心（规划中）',
+            children: [
+              { id:'nc1', label: '共享配置 common-config', children:[] },
+              { id:'nc2', label: '服务私有配置', children:[] },
+              { id:'nc3', label: '@RefreshScope 动态刷新', children:[] },
+            ]
+          },
+          {
+            id: 'nacos-dashboard',
+            label: 'Nacos Dashboard',
+            children: [
+              { id:'nd1', label: '地址: localhost:8848/nacos', children:[] },
+              { id:'nd2', label: '服务列表查看', children:[] },
+              { id:'nd3', label: '健康检查状态', children:[] },
+              { id:'nd4', label: '服务上下线管理', children:[] },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'sentinel',
+        label: 'Sentinel 流量治理',
+        children: [
+          {
+            id: 'sentinel-gateway',
+            label: '网关限流',
+            children: [
+              { id:'sg1', label: 'SentinelGatewayConfig 硬编码规则', children:[] },
+              { id:'sg2', label: '按路由组限流 QPS=100', children:[] },
+              { id:'sg3', label: 'Dashboard: localhost:8080', children:[] },
+              { id:'sg4', label: 'eager: true 启动即加载规则', children:[] },
+            ]
+          },
+          {
+            id: 'sentinel-degrade',
+            label: '降级熔断（规划中）',
+            children: [
+              { id:'sd1', label: '@SentinelResource 注解', children:[] },
+              { id:'sd2', label: 'blockHandler 降级方法', children:[] },
+              { id:'sd3', label: 'fallback 异常兜底', children:[] },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'auth-flow',
+        label: '认证流程',
+        children: [
+          {
+            id: 'auth-login',
+            label: '用户登录',
+            children: [
+              { id:'al1', label: 'POST /auth/login 获取 token', children:[] },
+              { id:'al2', label: '返回 accessToken (2h) + refreshToken (7d)', children:[] },
+            ]
+          },
+          {
+            id: 'auth-verify',
+            label: '请求鉴权',
+            children: [
+              { id:'av1', label: 'Header: Authorization: Bearer xxx', children:[] },
+              { id:'av2', label: 'Gateway JwtAuthGlobalFilter 校验', children:[] },
+              { id:'av3', label: '解析 userId / username / roles', children:[] },
+              { id:'av4', label: '透传 X-User-Id / X-Username / X-User-Roles', children:[] },
+            ]
+          },
+          {
+            id: 'auth-feign',
+            label: '服务间调用',
+            children: [
+              { id:'af1', label: 'FeignAuthRequestInterceptor 自动携带 Header', children:[] },
+            ]
+          },
+          {
+            id: 'auth-whitelist',
+            label: '白名单路径',
+            children: [
+              { id:'aw1', label: '/auth/login — 登录', children:[] },
+              { id:'aw2', label: '/auth/register — 注册', children:[] },
+              { id:'aw3', label: '/auth/refresh — 刷新 token', children:[] },
+            ]
+          },
+        ]
+      },
+      {
+        id: 'standards',
+        label: '开发规范',
+        children: [
+          { id:'std1', label: '模块命名: service-{业务域}', children:[] },
+          { id:'std2', label: '统一使用 R<T> 作为返回值', children:[] },
+          { id:'std3', label: '异常统一抛出 BizException', children:[] },
+          { id:'std4', label: '错误码统一管理在枚举中', children:[] },
+          { id:'std5', label: '日志使用 SLF4J + MDC traceId', children:[] },
+          { id:'std6', label: '敏感数据用 DesensitizeUtil 脱敏', children:[] },
+          { id:'std7', label: '包名: com.eldercare.{模块}', children:[] },
+        ]
+      },
+    ]
+  };
+
+  // ---- LAYOUT ENGINE (top-down tree, two-pass) ----
+  const H_GAP = 28;
+  const V_GAP = 16;
+  const PAD = { 0: [28,52], 1: [16,32], 2: [10,20], 3: [6,14] };
+
+  function getDims(level, label) {
+    var lines = label.split('\n');
+    var maxChars = 0;
+    for (var i = 0; i < lines.length; i++) {
+      if (lines[i].length > maxChars) maxChars = lines[i].length;
+    }
+    var cw = level === 0 ? 22 : level === 1 ? 17 : level === 2 ? 14 : 12;
+    var lh = level === 0 ? 28 : level === 1 ? 22 : level === 2 ? 18 : 16;
+    var p = PAD[level] || PAD[3];
+    return {
+      w: Math.max(maxChars * cw + p[1] * 2, level === 0 ? 280 : level === 1 ? 180 : 100),
+      h: lines.length * lh + p[0] * 2
+    };
+  }
+
+  var nodePositions = {};
+  var collapsed = new Set();
+  var svgLines = [];
+
+  // Track cached widths per node to avoid double recursion
+  var widthCache = {};
+
+  function measureWidth(node, level) {
+    if (collapsed.has(node.id)) {
+      var d = getDims(level, node.label);
+      widthCache[node.id] = d.w;
+      return d.w;
+    }
+    if (!node.children || node.children.length === 0) {
+      var d = getDims(level, node.label);
+      widthCache[node.id] = d.w;
+      return d.w;
+    }
+    var total = 0;
+    for (var i = 0; i < node.children.length; i++) {
+      total += measureWidth(node.children[i], level + 1);
+      if (i < node.children.length - 1) total += H_GAP;
+    }
+    var selfW = getDims(level, node.label).w;
+    var w = Math.max(selfW, total);
+    widthCache[node.id] = w;
+    return w;
+  }
+
+  function placeNodes(node, level, x0, y0) {
+    var dims = getDims(level, node.label);
+    var tw = widthCache[node.id];
+    var sx = x0 + (tw - dims.w) / 2;
+
+    nodePositions[node.id] = { id: node.id, x: sx, y: y0, w: dims.w, h: dims.h, level: level, label: node.label };
+
+    if (!node.children || node.children.length === 0 || collapsed.has(node.id)) return;
+
+    var childrenTotalW = 0;
+    for (var i = 0; i < node.children.length; i++) {
+      childrenTotalW += widthCache[node.children[i].id];
+      if (i < node.children.length - 1) childrenTotalW += H_GAP;
+    }
+
+    var cx = x0 + (tw - childrenTotalW) / 2;
+    var cy = y0 + dims.h + V_GAP;
+
+    for (var i = 0; i < node.children.length; i++) {
+      var child = node.children[i];
+      placeNodes(child, level + 1, cx, cy);
+      svgLines.push({
+        x1: sx + dims.w / 2, y1: y0 + dims.h,
+        x2: nodePositions[child.id].x + nodePositions[child.id].w / 2,
+        y2: cy,
+        level: level
+      });
+      cx += widthCache[child.id] + H_GAP;
+    }
+  }
+
+  function layout() {
+    nodePositions = {};
+    svgLines = [];
+    widthCache = {};
+    measureWidth(tree, 0);
+    placeNodes(tree, 0, 0, 0);
+    return nodePositions;
+  }
+
+  // ---- RENDER ----
+  const nodesLayer = document.getElementById('nodesLayer');
+  const linesLayer = document.getElementById('linesLayer');
+  const tooltip = document.getElementById('tooltip');
+
+  function renderLines() {
+    const colors = ['rgba(79,195,247,0.4)', 'rgba(124,77,255,0.3)', 'rgba(105,240,174,0.25)', 'rgba(255,255,255,0.1)'];
+    const widths = [2, 1.5, 1, 0.8];
+    let html = '';
+    for (const line of svgLines) {
+      const c = colors[Math.min(line.level, colors.length - 1)];
+      const w = widths[Math.min(line.level, widths.length - 1)];
+      html += `<line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+    }
+    linesLayer.innerHTML = `<svg width="100%" height="100%" style="position:absolute;top:0;left:0;">${html}</svg>`;
+  }
+
+  function renderNodes() {
+    let html = '';
+    for (const [id, pos] of Object.entries(nodePositions)) {
+      const hasChildren = treeHasChildren(id);
+      const isCollapsedNode = collapsed.has(id);
+      html += `
+        <div class="node level-${pos.level}${hasChildren ? '' : ' leaf'}${isCollapsedNode ? ' collapsed' : ''}"
+             id="node-${id}"
+             style="left:${pos.x}px;top:${pos.y}px;width:${pos.w}px;"
+             data-id="${id}"
+             data-level="${pos.level}">
+          <div class="node-card">
+            <span class="label">${escapeHtml(pos.label)}</span>
+            ${hasChildren ? `<span class="collapse-indicator">▼</span>` : ''}
+          </div>
+        </div>`;
+    }
+    nodesLayer.innerHTML = html;
+
+    // Bind events
+    document.querySelectorAll('.node').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleNode(el.dataset.id);
+      });
+      el.addEventListener('mouseenter', (e) => {
+        showTooltip(e, el.dataset.id);
+      });
+      el.addEventListener('mouseleave', hideTooltip);
+    });
+  }
+
+  function treeHasChildren(id) {
+    function find(node) {
+      if (node.id === id) return node.children && node.children.length > 0;
+      if (node.children) {
+        for (const c of node.children) {
+          const r = find(c);
+          if (r !== undefined) return r;
+        }
+      }
+      return undefined;
+    }
+    const r = find(tree);
+    return r === true;
+  }
+
+  function findNode(id) {
+    function f(node) {
+      if (node.id === id) return node;
+      if (node.children) {
+        for (const c of node.children) {
+          const r = f(c);
+          if (r) return r;
+        }
+      }
+      return null;
+    }
+    return f(tree);
+  }
+
+  function getAllDescendantIds(node) {
+    const ids = [];
+    function collect(n) {
+      ids.push(n.id);
+      if (n.children) n.children.forEach(collect);
+    }
+    if (node.children) node.children.forEach(collect);
+    return ids;
+  }
+
+  function toggleNode(id) {
+    const node = findNode(id);
+    if (!node || !node.children || node.children.length === 0) return;
+
+    if (collapsed.has(id)) {
+      collapsed.delete(id);
+    } else {
+      // Collect all descendants to hide
+      const descIds = getAllDescendantIds(node);
+      collapsed.add(id);
+      // Also clean up collapsed state for descendants
+      for (const did of descIds) {
+        collapsed.delete(did); // they won't be visible anyway
+      }
+    }
+    rebuild();
+  }
+
+  function collapseAll() {
+    collapsed.clear();
+    // Collapse all level-1 nodes
+    if (tree.children) {
+      for (const c of tree.children) {
+        collapsed.add(c.id);
+      }
+    }
+    rebuild();
+  }
+
+  function expandAll() {
+    collapsed.clear();
+    rebuild();
+  }
+
+  function rebuild() {
+    layout();
+    renderLines();
+    renderNodes();
+    updateToolbarButtons();
+  }
+
+  function updateToolbarButtons() {
+    const btnExpand = document.getElementById('btnExpand');
+    const btnCollapse = document.getElementById('btnCollapse');
+    if (collapsed.size === 0) {
+      btnExpand.classList.add('active');
+      btnCollapse.classList.remove('active');
+    } else {
+      btnExpand.classList.remove('active');
+    }
+  }
+
+  function showTooltip(e, id) {
+    const pos = nodePositions[id];
+    if (!pos) return;
+    const node = findNode(id);
+    if (!node) return;
+    const childCount = node.children ? node.children.length : 0;
+    if (childCount === 0) {
+      hideTooltip();
+      return;
+    }
+
+    const collapsedText = collapsed.has(id) ? `（已折叠 — 点击展开 ${childCount} 个子节点）` : `（点击折叠 — ${childCount} 个子节点）`;
+    tooltip.textContent = collapsedText;
+    tooltip.classList.add('visible');
+    tooltip.style.left = (e.clientX + 16) + 'px';
+    tooltip.style.top = (e.clientY - 8) + 'px';
+  }
+
+  function hideTooltip() {
+    tooltip.classList.remove('visible');
+  }
+
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML.replace(/\n/g, '<br>');
+  }
+
+  // ---- PANNING & ZOOMING ----
+  const mapContainer = document.getElementById('mapContainer');
+  let scale = 1;
+  let panX = 0, panY = 0;
+  let isPanning = false;
+  let startX, startY, startPanX, startPanY;
+
+  function applyTransform() {
+    nodesLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+    linesLayer.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  }
+
+  mapContainer.addEventListener('mousedown', (e) => {
+    if (e.target.closest('.node')) return; // ignore node clicks
+    isPanning = true;
+    mapContainer.classList.add('panning');
+    startX = e.clientX;
+    startY = e.clientY;
+    startPanX = panX;
+    startPanY = panY;
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = startPanX + (e.clientX - startX);
+    panY = startPanY + (e.clientY - startY);
+    applyTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    isPanning = false;
+    mapContainer.classList.remove('panning');
+  });
+
+  mapContainer.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? 0.9 : 1.1;
+    const newScale = Math.min(Math.max(scale * delta, 0.3), 2.5);
+    // Zoom towards cursor
+    const rect = mapContainer.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const ratio = newScale / scale;
+    panX = cx - ratio * (cx - panX);
+    panY = cy - ratio * (cy - panY);
+    scale = newScale;
+    applyTransform();
+  }, { passive: false });
+
+  // ---- INITIAL CENTERING ----
+  function centerRoot() {
+    layout();
+    var rootPos = nodePositions['root'];
+    var viewW = window.innerWidth;
+    var viewH = window.innerHeight - 56;
+    panX = viewW / 2 - (rootPos.x + rootPos.w / 2);
+    panY = viewH / 2 - (rootPos.y + rootPos.h / 2) - 40;
+    applyTransform();
+  }
+
+  // ---- BUTTONS ----
+  document.getElementById('btnExpand').addEventListener('click', expandAll);
+  document.getElementById('btnCollapse').addEventListener('click', collapseAll);
+  document.getElementById('btnReset').addEventListener('click', () => {
+    scale = 1;
+    expandAll();
+    setTimeout(centerRoot, 100);
+  });
+
+  // ---- KEYBOARD ----
+  window.addEventListener('keydown', (e) => {
+    switch(e.key.toLowerCase()) {
+      case 'e': expandAll(); break;
+      case 'c': collapseAll(); break;
+      case 'r': scale = 1; expandAll(); setTimeout(centerRoot, 100); break;
+      case '0': scale = 1; panX = 0; panY = 0; applyTransform(); break;
+    }
+  });
+
+  // ---- INIT ----
+  layout();
+  renderLines();
+  renderNodes();
+  setTimeout(centerRoot, 50);
+
+  // ---- Resize ----
+  window.addEventListener('resize', () => {
+    rebuild();
+    setTimeout(centerRoot, 50);
+  });
+
+  console.log('🏥 eldercare-platform 思维导图已就绪');
+  console.log('  拖拽平移 | 滚轮缩放 | 点击折叠/展开');
+  console.log('  快捷键: E=展开全部 C=收起至一级 R=重置视图');
+})();
+</script>
+</body>
+</html>
