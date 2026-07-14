@@ -20,8 +20,34 @@ public class GatewayTestRouteConfig {
     @Bean
     RouteLocator testRoutes(RouteLocatorBuilder builder) {
         return builder.routes()
+                // 通用测试路由 — 回显 JWT 透传的 X-User-* 头
                 .route("test-downstream", r -> r
                         .path("/test-downstream/**")
+                        .filters(f -> f.filter(echoHeadersFilter()))
+                        .uri("http://0.0.0.0:1"))
+                // 模拟管理后台路径（RBAC: ADMIN/OPERATOR 通过后才路由到这里）
+                .route("test-admin", r -> r
+                        .path("/admin/**")
+                        .filters(f -> f.filter(echoHeadersFilter()))
+                        .uri("http://0.0.0.0:1"))
+                // 模拟家属端路径（RBAC: ADMIN/FAMILY 通过后才路由到这里）
+                .route("test-family", r -> r
+                        .path("/family/**")
+                        .filters(f -> f.filter(echoHeadersFilter()))
+                        .uri("http://0.0.0.0:1"))
+                // 模拟老人端路径（RBAC: ADMIN/CAREGIVER 通过后才路由到这里）
+                .route("test-elderly", r -> r
+                        .path("/elderly/**")
+                        .filters(f -> f.filter(echoHeadersFilter()))
+                        .uri("http://0.0.0.0:1"))
+                // 模拟服务端路径（RBAC: ADMIN/OPERATOR/CAREGIVER 通过后才路由到这里）
+                .route("test-server", r -> r
+                        .path("/server/**")
+                        .filters(f -> f.filter(echoHeadersFilter()))
+                        .uri("http://0.0.0.0:1"))
+                // WebSocket 测试路由 — 模拟 ws 连接握手阶段的 JWT 校验
+                .route("test-ws", r -> r
+                        .path("/ws/test/**")
                         .filters(f -> f.filter(echoHeadersFilter()))
                         .uri("http://0.0.0.0:1"))
                 .build();

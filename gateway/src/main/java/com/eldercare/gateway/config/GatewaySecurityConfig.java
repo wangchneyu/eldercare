@@ -35,18 +35,30 @@ public class GatewaySecurityConfig {
     }
 
     /**
-     * CORS 跨域配置 — 允许四端（服务端/管理端/老人端/亲属端）跨域访问
+     * CORS 跨域配置 — 从 yml 配置读取允许的源域名模式
      * <p>
-     * 生产环境应将 allowedOriginPattern 限制为具体域名
+     * 开发环境默认允许所有源（"*"），生产环境应配置为具体域名列表。
      */
     @Bean
-    public CorsWebFilter corsWebFilter() {
+    public CorsWebFilter corsWebFilter(SecurityProperties properties) {
         CorsConfiguration config = new CorsConfiguration();
-        config.addAllowedOriginPattern("*");
+
+        // 从配置读取允许的源域名模式
+        SecurityProperties.CorsProperties corsProps = properties.getCors();
+        if (corsProps != null && corsProps.getAllowedOriginPatterns() != null
+                && !corsProps.getAllowedOriginPatterns().isEmpty()) {
+            corsProps.getAllowedOriginPatterns().forEach(config::addAllowedOriginPattern);
+        } else {
+            // 兜底：开发环境允许所有源
+            config.addAllowedOriginPattern("*");
+        }
+
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");
         config.setAllowCredentials(true);
-        config.setMaxAge(3600L);
+
+        long maxAge = corsProps != null ? corsProps.getMaxAge() : 3600L;
+        config.setMaxAge(maxAge);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", config);

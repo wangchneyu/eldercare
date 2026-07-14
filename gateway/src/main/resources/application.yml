@@ -72,6 +72,47 @@ eldercare:
     access-token-expiration: 7200
     refresh-token-expiration: 604800
 
+    # CORS 跨域配置
+    cors:
+      allowed-origin-patterns:
+        - "*"  # 开发环境使用通配符，生产环境改为具体域名列表
+      max-age: 3600
+
+    # RBAC 角色-路径映射（用户需拥有所列角色之一方可访问匹配路径）
+    role-mappings:
+      # 管理后台 — 运营管理
+      - paths:
+          - /admin/**
+        roles:
+          - ADMIN
+          - OPERATOR
+      # 服务端 — IoT 设备管理
+      - paths:
+          - /server/**
+        roles:
+          - ADMIN
+          - OPERATOR
+          - CAREGIVER
+      # 老人端 — 体征/照护/AI
+      - paths:
+          - /elderly/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+      # 家属端 — 关怀/通知
+      - paths:
+          - /family/**
+        roles:
+          - ADMIN
+          - FAMILY
+      # 家属生活推送 WebSocket
+      - paths:
+          - /ws/family-living/**
+        roles:
+          - ADMIN
+          - FAMILY
+      # /ws/alert/** 不在此配置 → 所有已认证用户均可访问
+
 # ==================== 日志 ====================
 logging:
   level:

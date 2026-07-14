@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>eldercare-platform 基础架构与技术栈</title>
+<title>Spring Cloud Alibaba 架构构建流程与原理</title>
 <style>
   :root {
     --bg: #0f1119;
@@ -371,7 +371,7 @@
   <span class="dot d1"></span>
   <span class="dot d2"></span>
   <span class="dot d3"></span>
-  <h1>eldercare-platform · 基础架构与技术栈</h1>
+  <h1>Spring Cloud Alibaba · 架构构建流程与原理</h1>
   <span class="subtitle">SPRING CLOUD ALIBABA</span>
 </header>
 
@@ -402,264 +402,161 @@
   // ---- DATA ----
   const tree = {
     id: 'root',
-    label: 'eldercare-platform\n基础架构',
+    label: 'eldercare-platform\n架构构建流程',
     children: [
       {
-        id: 'overview',
-        label: '项目概述',
-        children: [
-          { id:'ov1', label: '智慧养老微服务平台', children:[] },
-          { id:'ov2', label: 'JDK 17 + Spring Boot 3.2.4', children:[] },
-          { id:'ov3', label: 'Spring Cloud 2023.0.1', children:[] },
-          { id:'ov4', label: 'Spring Cloud Alibaba 2023.0.1.0', children:[] },
-          { id:'ov5', label: 'Maven 多模块聚合工程', children:[] },
-        ]
-      },
-      {
-        id: 'modules',
-        label: '项目模块架构',
+        id: 'step1',
+        label: '① 工程结构设计',
         children: [
           {
-            id: 'gateway',
-            label: 'gateway  API网关 :9999',
+            id: 's1-maven',
+            label: 'Maven 多模块聚合',
             children: [
-              { id:'gw1', label: 'Spring Cloud Gateway (WebFlux)', children:[] },
-              { id:'gw2', label: 'JWT 全局鉴权过滤器', children:[] },
-              { id:'gw3', label: 'Sentinel 网关限流 QPS=100', children:[] },
-              { id:'gw4', label: 'WebSocket 连接限制', children:[] },
-              { id:'gw5', label: 'CORS 跨域配置', children:[] },
+              { id:'s1m1', label: '父 POM 统一管理版本', children:[] },
+              { id:'s1m2', label: 'dependencyManagement 依赖收敛', children:[] },
+              { id:'s1m3', label: 'Spring Boot + Cloud + Alibaba BOM 三合一', children:[] },
+              { id:'s1m4', label: '版本锁定：避免依赖冲突', children:[] },
             ]
           },
           {
-            id: 'common',
-            label: 'common 通用模块',
+            id: 's1-module',
+            label: '模块划分原则',
             children: [
-              {
-                id:'common-core',
-                label: 'common-core  核心模块',
-                children: [
-                  { id:'cc1', label: 'R<T> 统一响应体（含traceId）', children:[] },
-                  { id:'cc2', label: 'GlobalExceptionHandler 全局异常处理', children:[] },
-                  { id:'cc3', label: 'IErrorCode / SystemErrorCode 错误码体系', children:[] },
-                  { id:'cc4', label: 'BaseEntity 基础实体', children:[] },
-                  { id:'cc5', label: 'TraceContext MDC 链路追踪', children:[] },
-                  { id:'cc6', label: 'DesensitizeUtil 数据脱敏', children:[] },
-                ]
-              },
-              {
-                id:'common-security',
-                label: 'common-security  安全模块',
-                children: [
-                  { id:'cs1', label: 'JwtTokenProvider HMAC-SHA256', children:[] },
-                  { id:'cs2', label: 'JwtAuthenticationFilter Servlet过滤器', children:[] },
-                  { id:'cs3', label: '@RequireRole 角色鉴权 AOP', children:[] },
-                  { id:'cs4', label: 'SecurityContextHolder (ThreadLocal)', children:[] },
-                  { id:'cs5', label: 'FeignAuthRequestInterceptor Feign拦截器', children:[] },
-                  { id:'cs6', label: 'LoginUser / UserRole 用户角色模型', children:[] },
-                ]
-              },
-              { id:'common-file', label: 'common-file  文件存储', children:[] },
-              { id:'common-notif', label: 'common-notification  消息通知', children:[] },
-              { id:'common-audit', label: 'common-audit  审计日志', children:[] },
-            ]
-          },
-          {
-            id: 'services',
-            label: '业务服务（8个微服务）',
-            children: [
-              { id:'svc-auth', label: 'service-auth  认证服务 :8090', children:[] },
-              { id:'svc-care', label: 'service-care  护理服务 :8083', children:[] },
-              { id:'svc-vital', label: 'service-vital  体征监测 :8091', children:[] },
-              { id:'svc-family', label: 'service-family  家属端 :8092', children:[] },
-              { id:'svc-iot', label: 'service-iot  设备管理 :8094', children:[] },
-              { id:'svc-alert', label: 'service-alert  告警推送 :8095 (WS)', children:[] },
-              { id:'svc-ai', label: 'service-ai  AI服务 :8093', children:[] },
-              { id:'svc-op', label: 'service-operation  运营后台 :8087', children:[] },
+              { id:'s1d1', label: 'common：可复用基础设施（内部 SDK）', children:[] },
+              { id:'s1d2', label: 'gateway：统一入口，与业务解耦', children:[] },
+              { id:'s1d3', label: 'service：按业务域拆分（DDD 限界上下文）', children:[] },
+              { id:'s1d4', label: '每个 service 独立部署、独立数据库', children:[] },
             ]
           },
         ]
       },
       {
-        id: 'common-usage',
-        label: '公共模块使用指南',
+        id: 'step2',
+        label: '② 公共模块构建（核心）',
         children: [
           {
-            id: 'usage-r',
-            label: 'R<T> 统一响应',
+            id: 's2-core',
+            label: 'common-core：统一基础约定',
             children: [
-              { id:'ur1', label: 'R.ok(data) — 成功返回', children:[] },
-              { id:'ur2', label: 'R.fail(errorCode) — 失败返回', children:[] },
-              { id:'ur3', label: '自动包装 traceId', children:[] },
-              { id:'ur4', label: 'Controller 层直接返回', children:[] },
+              { id:'s2c1', label: 'R<T> 统一响应体 → 前端对接标准化', children:[] },
+              { id:'s2c2', label: '全局异常处理 → 异常自动转 R 响应', children:[] },
+              { id:'s2c3', label: '错误码枚举 → 异常可追溯、可分类', children:[] },
+              { id:'s2c4', label: 'TraceContext (MDC) → 日志串联全链路', children:[] },
             ]
           },
           {
-            id: 'usage-exception',
-            label: '全局异常处理',
+            id: 's2-security',
+            label: 'common-security：统一安全底座',
             children: [
-              { id:'ue1', label: 'throw new BizException(errorCode)', children:[] },
-              { id:'ue2', label: '传入 IErrorCode 枚举', children:[] },
-              { id:'ue3', label: 'GlobalExceptionHandler 自动捕获并转换', children:[] },
+              { id:'s2s1', label: 'JWT 无状态认证 → 服务不存 session', children:[] },
+              { id:'s2s2', label: 'Gateway 全局过滤器 → 入口统一鉴权', children:[] },
+              { id:'s2s3', label: '@RequireRole AOP → 方法级权限控制', children:[] },
+              { id:'s2s4', label: 'Feign 拦截器 → token 自动透传下游', children:[] },
+              { id:'s2s5', label: 'SecurityContextHolder → 当前用户上下文', children:[] },
             ]
           },
           {
-            id: 'usage-jwt',
-            label: 'JWT 认证',
+            id: 's2-design',
+            label: '公共模块设计原理',
             children: [
-              { id:'uj1', label: '配置 secret / 过期时间', children:[] },
-              { id:'uj2', label: '登录时生成 token 返回', children:[] },
-              { id:'uj3', label: '请求头: Authorization: Bearer xxx', children:[] },
-              { id:'uj4', label: 'Gateway 自动校验', children:[] },
-            ]
-          },
-          {
-            id: 'usage-role',
-            label: '角色鉴权',
-            children: [
-              { id:'uro1', label: '@RequireRole({ADMIN, OPERATOR}) 注解', children:[] },
-              { id:'uro2', label: 'AOP 自动拦截校验', children:[] },
-              { id:'uro3', label: 'SecurityContextHolder.get() 获取当前用户', children:[] },
-            ]
-          },
-          {
-            id: 'usage-feign',
-            label: 'Feign 服务间调用',
-            children: [
-              { id:'uf1', label: '@FeignClient 声明接口即可', children:[] },
-              { id:'uf2', label: 'FeignAuthRequestInterceptor 自动携带 token', children:[] },
-              { id:'uf3', label: '自动传播 traceId', children:[] },
-            ]
-          },
-          {
-            id: 'usage-trace',
-            label: '链路追踪',
-            children: [
-              { id:'ut1', label: 'TraceContext.generate() 生成 traceId', children:[] },
-              { id:'ut2', label: 'MDC 自动写入日志', children:[] },
-              { id:'ut3', label: '跨服务 Feign 调用自动传递', children:[] },
+              { id:'s2d1', label: '零业务耦合：只放横切关注点', children:[] },
+              { id:'s2d2', label: '约定优于配置：统一规范降低沟通成本', children:[] },
+              { id:'s2d3', label: '按需引入：每个 common-* 独立 jar', children:[] },
+              { id:'s2d4', label: 'AutoConfiguration 机制：引入即生效', children:[] },
             ]
           },
         ]
       },
       {
-        id: 'nacos',
-        label: 'Nacos 使用指南',
+        id: 'step3',
+        label: '③ 服务注册与发现（Nacos）',
         children: [
           {
-            id: 'nacos-registry',
-            label: '服务注册与发现',
+            id: 's3-registry',
+            label: 'Nacos 注册中心原理',
             children: [
-              { id:'nr1', label: '引入 nacos-discovery 依赖', children:[] },
-              { id:'nr2', label: '配置 server-addr: 127.0.0.1:8848', children:[] },
-              { id:'nr3', label: '@EnableDiscoveryClient 注解', children:[] },
-              { id:'nr4', label: 'spring.application.name 即服务名', children:[] },
+              { id:'s3r1', label: '服务启动 → 向 Nacos 注册（临时实例）', children:[] },
+              { id:'s3r2', label: '心跳保活 5s/次，15s 无心跳剔除', children:[] },
+              { id:'s3r3', label: 'Gateway 通过服务名做负载均衡（lb://）', children:[] },
+              { id:'s3r4', label: 'AP 模型：优先可用性（适合微服务）', children:[] },
             ]
           },
           {
-            id: 'nacos-config',
-            label: '配置中心（规划中）',
+            id: 's3-config',
+            label: 'Nacos 配置中心',
             children: [
-              { id:'nc1', label: '共享配置 common-config', children:[] },
-              { id:'nc2', label: '服务私有配置', children:[] },
-              { id:'nc3', label: '@RefreshScope 动态刷新', children:[] },
+              { id:'s3c1', label: '共享配置：所有服务共用的通用配置', children:[] },
+              { id:'s3c2', label: '私有配置：各服务独立配置热更新', children:[] },
+              { id:'s3c3', label: '@RefreshScope → 配置变更实时生效', children:[] },
             ]
           },
           {
-            id: 'nacos-dashboard',
-            label: 'Nacos Dashboard',
+            id: 's3-operation',
+            label: '使用方式',
             children: [
-              { id:'nd1', label: '地址: localhost:8848/nacos', children:[] },
-              { id:'nd2', label: '服务列表查看', children:[] },
-              { id:'nd3', label: '健康检查状态', children:[] },
-              { id:'nd4', label: '服务上下线管理', children:[] },
+              { id:'s3o1', label: '引入 nacos-discovery 依赖', children:[] },
+              { id:'s3o2', label: '配置 server-addr + application.name', children:[] },
+              { id:'s3o3', label: 'Dashboard: 服务列表 / 健康检查 / 上下线', children:[] },
             ]
           },
         ]
       },
       {
-        id: 'sentinel',
-        label: 'Sentinel 流量治理',
+        id: 'step4',
+        label: '④ Gateway 统一网关',
         children: [
           {
-            id: 'sentinel-gateway',
-            label: '网关限流',
+            id: 's4-route',
+            label: '路由机制',
             children: [
-              { id:'sg1', label: 'SentinelGatewayConfig 硬编码规则', children:[] },
-              { id:'sg2', label: '按路由组限流 QPS=100', children:[] },
-              { id:'sg3', label: 'Dashboard: localhost:8080', children:[] },
-              { id:'sg4', label: 'eager: true 启动即加载规则', children:[] },
+              { id:'s4r1', label: '基于 Path 断言匹配（/auth/** → service-auth）', children:[] },
+              { id:'s4r2', label: 'lb:// 负载均衡（Ribbon → Spring Cloud LoadBalancer）', children:[] },
+              { id:'s4r3', label: 'WebFlux 响应式 → 非阻塞 IO，高吞吐', children:[] },
+              { id:'s4r4', label: '也支持 WebSocket 路由（ws 协议透传）', children:[] },
             ]
           },
           {
-            id: 'sentinel-degrade',
-            label: '降级熔断（规划中）',
+            id: 's4-filter',
+            label: '过滤器链',
             children: [
-              { id:'sd1', label: '@SentinelResource 注解', children:[] },
-              { id:'sd2', label: 'blockHandler 降级方法', children:[] },
-              { id:'sd3', label: 'fallback 异常兜底', children:[] },
+              { id:'s4f1', label: 'GlobalFilter 全局过滤器（order 控制顺序）', children:[] },
+              { id:'s4f2', label: 'JWT 过滤器 order=-100：最先执行鉴权', children:[] },
+              { id:'s4f3', label: '解析 token → 设请求头 X-User-Id/Roles', children:[] },
+              { id:'s4f4', label: '白名单路径直接放行，不校验 token', children:[] },
             ]
           },
         ]
       },
       {
-        id: 'auth-flow',
-        label: '认证流程',
+        id: 'step5',
+        label: '⑤ Sentinel 流量治理',
         children: [
           {
-            id: 'auth-login',
-            label: '用户登录',
+            id: 's5-flow',
+            label: '网关层限流',
             children: [
-              { id:'al1', label: 'POST /auth/login 获取 token', children:[] },
-              { id:'al2', label: '返回 accessToken (2h) + refreshToken (7d)', children:[] },
+              { id:'s5f1', label: '按路由组限流（SentinelGatewayConfig）', children:[] },
+              { id:'s5f2', label: 'QPS 阈值：超限返回 429 或降级响应', children:[] },
+              { id:'s5f3', label: 'eager=true → 启动即加载规则（防止冷启动雪崩）', children:[] },
             ]
           },
           {
-            id: 'auth-verify',
-            label: '请求鉴权',
+            id: 's5-degrade',
+            label: '服务层熔断降级',
             children: [
-              { id:'av1', label: 'Header: Authorization: Bearer xxx', children:[] },
-              { id:'av2', label: 'Gateway JwtAuthGlobalFilter 校验', children:[] },
-              { id:'av3', label: '解析 userId / username / roles', children:[] },
-              { id:'av4', label: '透传 X-User-Id / X-Username / X-User-Roles', children:[] },
+              { id:'s5d1', label: '@SentinelResource 标记资源点', children:[] },
+              { id:'s5d2', label: 'blockHandler → 限流/熔断后走降级逻辑', children:[] },
+              { id:'s5d3', label: 'Sentinel Dashboard 实时监控 + 动态改规则', children:[] },
             ]
           },
-          {
-            id: 'auth-feign',
-            label: '服务间调用',
-            children: [
-              { id:'af1', label: 'FeignAuthRequestInterceptor 自动携带 Header', children:[] },
-            ]
-          },
-          {
-            id: 'auth-whitelist',
-            label: '白名单路径',
-            children: [
-              { id:'aw1', label: '/auth/login — 登录', children:[] },
-              { id:'aw2', label: '/auth/register — 注册', children:[] },
-              { id:'aw3', label: '/auth/refresh — 刷新 token', children:[] },
-            ]
-          },
-        ]
-      },
-      {
-        id: 'standards',
-        label: '开发规范',
-        children: [
-          { id:'std1', label: '模块命名: service-{业务域}', children:[] },
-          { id:'std2', label: '统一使用 R<T> 作为返回值', children:[] },
-          { id:'std3', label: '异常统一抛出 BizException', children:[] },
-          { id:'std4', label: '错误码统一管理在枚举中', children:[] },
-          { id:'std5', label: '日志使用 SLF4J + MDC traceId', children:[] },
-          { id:'std6', label: '敏感数据用 DesensitizeUtil 脱敏', children:[] },
-          { id:'std7', label: '包名: com.eldercare.{模块}', children:[] },
         ]
       },
     ]
   };
 
-  // ---- LAYOUT ENGINE (top-down tree, two-pass) ----
-  const H_GAP = 28;
-  const V_GAP = 16;
+  // ---- LAYOUT ENGINE (left-to-right tree, two-pass) ----
+  const SIBLING_GAP = 12;  // vertical gap between siblings
+  const LEVEL_GAP = 50;    // horizontal gap between levels
   const PAD = { 0: [28,52], 1: [16,32], 2: [10,20], 3: [6,14] };
 
   function getDims(level, label) {
@@ -672,7 +569,7 @@
     var lh = level === 0 ? 28 : level === 1 ? 22 : level === 2 ? 18 : 16;
     var p = PAD[level] || PAD[3];
     return {
-      w: Math.max(maxChars * cw + p[1] * 2, level === 0 ? 280 : level === 1 ? 180 : 100),
+      w: Math.max(maxChars * cw + p[1] * 2, level === 0 ? 280 : level === 1 ? 190 : 110),
       h: lines.length * lh + p[0] * 2
     };
   }
@@ -681,67 +578,71 @@
   var collapsed = new Set();
   var svgLines = [];
 
-  // Track cached widths per node to avoid double recursion
-  var widthCache = {};
+  // Cache: for each node, store the total subtree height
+  var heightCache = {};
 
-  function measureWidth(node, level) {
-    if (collapsed.has(node.id)) {
-      var d = getDims(level, node.label);
-      widthCache[node.id] = d.w;
-      return d.w;
-    }
+  // Pass 1: measure subtree heights (bottom-up)
+  function measureHeight(node, level) {
+    if (collapsed.has(node.id)) { var d = getDims(level, node.label); heightCache[node.id] = d.h; return d.h; }
     if (!node.children || node.children.length === 0) {
       var d = getDims(level, node.label);
-      widthCache[node.id] = d.w;
-      return d.w;
+      heightCache[node.id] = d.h;
+      return d.h;
     }
     var total = 0;
     for (var i = 0; i < node.children.length; i++) {
-      total += measureWidth(node.children[i], level + 1);
-      if (i < node.children.length - 1) total += H_GAP;
+      total += measureHeight(node.children[i], level + 1);
+      if (i < node.children.length - 1) total += SIBLING_GAP;
     }
-    var selfW = getDims(level, node.label).w;
-    var w = Math.max(selfW, total);
-    widthCache[node.id] = w;
-    return w;
+    var selfH = getDims(level, node.label).h;
+    heightCache[node.id] = Math.max(selfH, total);
+    return heightCache[node.id];
   }
 
-  function placeNodes(node, level, x0, y0) {
+  // Pass 2: assign coordinates (top-down, left-to-right)
+  function placeNodes(node, level, x, y) {
     var dims = getDims(level, node.label);
-    var tw = widthCache[node.id];
-    var sx = x0 + (tw - dims.w) / 2;
+    var th = heightCache[node.id];
 
-    nodePositions[node.id] = { id: node.id, x: sx, y: y0, w: dims.w, h: dims.h, level: level, label: node.label };
+    // Center self vertically within its subtree height
+    var sy = y + (th - dims.h) / 2;
+
+    nodePositions[node.id] = { id: node.id, x: x, y: sy, w: dims.w, h: dims.h, level: level, label: node.label };
 
     if (!node.children || node.children.length === 0 || collapsed.has(node.id)) return;
 
-    var childrenTotalW = 0;
+    // Calculate children total height
+    var childrenTotalH = 0;
     for (var i = 0; i < node.children.length; i++) {
-      childrenTotalW += widthCache[node.children[i].id];
-      if (i < node.children.length - 1) childrenTotalW += H_GAP;
+      childrenTotalH += heightCache[node.children[i].id];
+      if (i < node.children.length - 1) childrenTotalH += SIBLING_GAP;
     }
 
-    var cx = x0 + (tw - childrenTotalW) / 2;
-    var cy = y0 + dims.h + V_GAP;
+    // Children start vertically centered within my subtree
+    var cy = y + (th - childrenTotalH) / 2;
+    var cx = x + dims.w + LEVEL_GAP;
 
     for (var i = 0; i < node.children.length; i++) {
       var child = node.children[i];
       placeNodes(child, level + 1, cx, cy);
+
+      // Draw connecting line (bezier-like: horizontal from parent right edge, then curve)
       svgLines.push({
-        x1: sx + dims.w / 2, y1: y0 + dims.h,
-        x2: nodePositions[child.id].x + nodePositions[child.id].w / 2,
-        y2: cy,
+        x1: x + dims.w,
+        y1: sy + dims.h / 2,
+        x2: cx,
+        y2: nodePositions[child.id].y + nodePositions[child.id].h / 2,
         level: level
       });
-      cx += widthCache[child.id] + H_GAP;
+      cy += heightCache[child.id] + SIBLING_GAP;
     }
   }
 
   function layout() {
     nodePositions = {};
     svgLines = [];
-    widthCache = {};
-    measureWidth(tree, 0);
+    heightCache = {};
+    measureHeight(tree, 0);
     placeNodes(tree, 0, 0, 0);
     return nodePositions;
   }
@@ -752,15 +653,19 @@
   const tooltip = document.getElementById('tooltip');
 
   function renderLines() {
-    const colors = ['rgba(79,195,247,0.4)', 'rgba(124,77,255,0.3)', 'rgba(105,240,174,0.25)', 'rgba(255,255,255,0.1)'];
-    const widths = [2, 1.5, 1, 0.8];
-    let html = '';
-    for (const line of svgLines) {
-      const c = colors[Math.min(line.level, colors.length - 1)];
-      const w = widths[Math.min(line.level, widths.length - 1)];
-      html += `<line x1="${line.x1}" y1="${line.y1}" x2="${line.x2}" y2="${line.y2}" stroke="${c}" stroke-width="${w}" stroke-linecap="round"/>`;
+    var colors = ['rgba(79,195,247,0.45)', 'rgba(124,77,255,0.3)', 'rgba(105,240,174,0.25)', 'rgba(255,255,255,0.1)'];
+    var widths = [2.5, 1.8, 1.2, 0.8];
+    var html = '';
+    for (var i = 0; i < svgLines.length; i++) {
+      var L = svgLines[i];
+      var c = colors[Math.min(L.level, colors.length - 1)];
+      var w = widths[Math.min(L.level, widths.length - 1)];
+      var mx = L.x1 + (L.x2 - L.x1) * 0.5;
+      // Smooth bezier: horizontal from parent, curve to child
+      var d = 'M' + L.x1 + ',' + L.y1 + ' C' + mx + ',' + L.y1 + ' ' + mx + ',' + L.y2 + ' ' + L.x2 + ',' + L.y2;
+      html += '<path d="' + d + '" fill="none" stroke="' + c + '" stroke-width="' + w + '" stroke-linecap="round"/>';
     }
-    linesLayer.innerHTML = `<svg width="100%" height="100%" style="position:absolute;top:0;left:0;">${html}</svg>`;
+    linesLayer.innerHTML = '<svg width="100%" height="100%" style="position:absolute;top:0;left:0;">' + html + '</svg>';
   }
 
   function renderNodes() {
@@ -966,11 +871,24 @@
   // ---- INITIAL CENTERING ----
   function centerRoot() {
     layout();
-    var rootPos = nodePositions['root'];
+    var minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (var id in nodePositions) {
+      var p = nodePositions[id];
+      if (p.x < minX) minX = p.x;
+      if (p.y < minY) minY = p.y;
+      if (p.x + p.w > maxX) maxX = p.x + p.w;
+      if (p.y + p.h > maxY) maxY = p.y + p.h;
+    }
+    var treeW = maxX - minX;
+    var treeH = maxY - minY;
     var viewW = window.innerWidth;
     var viewH = window.innerHeight - 56;
-    panX = viewW / 2 - (rootPos.x + rootPos.w / 2);
-    panY = viewH / 2 - (rootPos.y + rootPos.h / 2) - 40;
+    // Scale to fit vertically, clamp between 0.25 and 1
+    scale = Math.min(Math.max((viewH - 100) / treeH, 0.35), 1);
+    // Center the tree root node vertically, with left margin
+    var rp = nodePositions['root'];
+    panX = 60;
+    panY = viewH / 2 - (rp.y + rp.h / 2) * scale;
     applyTransform();
   }
 
