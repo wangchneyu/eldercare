@@ -1,0 +1,10 @@
+server:
+  port: 8087 # service-elder ?? 8083?????
+
+spring:
+  application:
+    name: service-operation # ????????
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848 # Nacos ??????
