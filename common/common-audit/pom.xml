@@ -7,9 +7,11 @@
         <groupId>com.eldercare</groupId>
         <artifactId>common</artifactId>
         <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>common-audit</artifactId>
+    <description>系统审计与操作日志管理模块</description>
 
     <dependencies>
         <!-- 引入 common-core 基础库 -->
@@ -39,5 +41,4 @@
             <scope>test</scope>
         </dependency>
     </dependencies>
-
 </project>

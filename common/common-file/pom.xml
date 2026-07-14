@@ -7,9 +7,11 @@
         <groupId>com.eldercare</groupId>
         <artifactId>common</artifactId>
         <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>common-file</artifactId>
+    <description>文件处理模块，集成 OSS、MinIO 等云存储或本地上传</description>
 
     <dependencies>
         <!-- 引入 common-core 基础库 -->
