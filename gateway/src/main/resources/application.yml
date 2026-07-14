@@ -1,0 +1,10 @@
+server:
+  port: 9999 # 网关入口端口（若冲突可改为 9999）
+
+spring:
+  application:
+    name: gateway # 注册到 Nacos 中的名字
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848 # Nacos 地址
