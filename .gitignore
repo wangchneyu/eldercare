@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Logs ###
+logs/
+**/logs/
+
+### Local IDE Config ###
+.claude/
