@@ -13,6 +13,8 @@ public class FileProperties {
 
     private LocalConfig local = new LocalConfig();
 
+    private CosConfig cos = new CosConfig();
+
     @Data
     public static class LocalConfig {
         /**
@@ -24,5 +26,33 @@ public class FileProperties {
          * 预览基础域名，如 http://localhost:8080，本地 Mock 会将其拼接为签名URL的前缀
          */
         private String domain = "http://localhost:8080";
+    }
+
+    @Data
+    public static class CosConfig {
+        /**
+         * 腾讯云 SecretId
+         */
+        private String secretId;
+
+        /**
+         * 腾讯云 SecretKey
+         */
+        private String secretKey;
+
+        /**
+         * 腾讯云 区域 (e.g. ap-guangzhou)
+         */
+        private String region;
+
+        /**
+         * 腾讯云 存储桶名称
+         */
+        private String bucketName;
+
+        /**
+         * 预览基础域名（自定义 CDN 域名或 COS 默认域名）
+         */
+        private String domain;
     }
 }

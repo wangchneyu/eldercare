@@ -1,7 +1,7 @@
 package com.eldercare.gateway.config;
 
-import com.eldercare.security.config.SecurityProperties;
-import com.eldercare.security.jwt.JwtTokenProvider;
+import com.eldercare.common.security.config.SecurityProperties;
+import com.eldercare.common.security.jwt.JwtTokenProvider;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

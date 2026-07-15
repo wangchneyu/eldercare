@@ -24,4 +24,25 @@ class IdUtilTest {
         }
         assertEquals(1_000, values.size());
     }
+
+    @Test
+    void shouldInitializeSnowflakeCorrectly() {
+        assertThrows(IllegalArgumentException.class, () -> IdUtil.initSnowflake(-1));
+        assertThrows(IllegalArgumentException.class, () -> IdUtil.initSnowflake(1024));
+
+        IdUtil.initSnowflake(512);
+        Long id = IdUtil.nextId();
+        assertNotNull(id);
+        assertTrue(id > 0);
+    }
+
+    @Test
+    void shouldGenerateUniqueSnowflakeIds() {
+        IdUtil.initSnowflake(1);
+        Set<Long> ids = new HashSet<>();
+        for (int i = 0; i < 1_000; i++) {
+            ids.add(IdUtil.nextId());
+        }
+        assertEquals(1_000, ids.size());
+    }
 }

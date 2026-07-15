@@ -1,9 +1,9 @@
 package com.eldercare.gateway.filter;
 
 import com.eldercare.gateway.GatewayApplication;
-import com.eldercare.security.domain.LoginUser;
-import com.eldercare.security.domain.UserRole;
-import com.eldercare.security.jwt.JwtTokenProvider;
+import com.eldercare.common.security.domain.LoginUser;
+import com.eldercare.common.security.domain.UserRole;
+import com.eldercare.common.security.jwt.JwtTokenProvider;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;

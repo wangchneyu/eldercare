@@ -1,6 +1,6 @@
 package com.eldercare.gateway;
 
-import com.eldercare.security.config.SecurityAutoConfiguration;
+import com.eldercare.common.security.config.SecurityAutoConfiguration;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;

@@ -1,37 +1,82 @@
 package com.eldercare.common.security.config;
 
-import com.eldercare.common.security.feign.FeignRequestInterceptor;
-import com.eldercare.common.security.interceptor.UserContextInterceptor;
-import feign.RequestInterceptor;
+import com.eldercare.common.security.aop.RequireRoleAspect;
+import com.eldercare.common.security.feign.FeignAuthRequestInterceptor;
+import com.eldercare.common.security.filter.JwtAuthenticationFilter;
+import com.eldercare.common.security.jwt.JwtTokenProvider;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
-import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-@Configuration
+/**
+ * 安全模块自动配置
+ * <p>
+ * 通过 SPI 机制自动注册，可通过 {@code eldercare.security.enabled=false} 关闭
+ */
+@AutoConfiguration
+@EnableConfigurationProperties(SecurityProperties.class)
+@ConditionalOnProperty(prefix = "eldercare.security", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnWebApplication
 public class SecurityAutoConfiguration {
 
-    /**
-     * 注册 Feign 传递安全上下文的拦截器
-     */
+    // ==================== JWT ====================
+
     @Bean
-    public RequestInterceptor feignRequestInterceptor() {
-        return new FeignRequestInterceptor();
+    @ConditionalOnMissingBean
+    public JwtTokenProvider jwtTokenProvider(SecurityProperties properties) {
+        return new JwtTokenProvider(
+                properties.getSecret(),
+                properties.getAccessTokenExpiration(),
+                properties.getRefreshTokenExpiration()
+        );
     }
 
-    /**
-     * 当处于 Web 应用程序环境下时，注册当前用户登录上下文拦截器
-     */
-    @Configuration
-    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
-    public static class WebMvcSecurityConfiguration implements WebMvcConfigurer {
-        
-        @Override
-        public void addInterceptors(InterceptorRegistry registry) {
-            registry.addInterceptor(new UserContextInterceptor())
-                    .addPathPatterns("/**")
-                    .order(-100); // 赋予较高优先级，确保在业务拦截器前提取好上下文
+    // ==================== Filter ====================
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthenticationFilterRegistration(
+            JwtTokenProvider jwtTokenProvider,
+            SecurityProperties properties,
+            ObjectProvider<ObjectMapper> objectMapperProvider) {
+        ObjectMapper objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        JwtAuthenticationFilter filter = new JwtAuthenticationFilter(
+                jwtTokenProvider, properties.getWhitelist(), objectMapper);
+
+        FilterRegistrationBean<JwtAuthenticationFilter> registration = new FilterRegistrationBean<>();
+        registration.setFilter(filter);
+        registration.setOrder(-100);           // 高优先级
+        registration.addUrlPatterns("/*");      // 拦截所有请求
+        registration.setName("jwtAuthenticationFilter");
+        return registration;
+    }
+
+    // ==================== AOP ====================
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnClass(name = "org.aspectj.lang.annotation.Aspect")
+    public RequireRoleAspect requireRoleAspect() {
+        return new RequireRoleAspect();
+    }
+
+    // ==================== Feign ====================
+
+    @Configuration(proxyBeanMethods = false)
+    @ConditionalOnClass(name = "feign.RequestInterceptor")
+    public static class FeignClientConfiguration {
+        @Bean
+        @ConditionalOnMissingBean
+        public FeignAuthRequestInterceptor feignAuthRequestInterceptor() {
+            return new FeignAuthRequestInterceptor();
         }
     }
 }

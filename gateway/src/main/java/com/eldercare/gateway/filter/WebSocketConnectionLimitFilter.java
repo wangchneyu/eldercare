@@ -1,6 +1,6 @@
 package com.eldercare.gateway.filter;
 
-import com.eldercare.security.domain.LoginUser;
+import com.eldercare.common.security.domain.LoginUser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;

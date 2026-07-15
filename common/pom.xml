@@ -28,6 +28,8 @@
         <module>common-file</module>
         <module>common-audit</module>
         <module>common-feign</module>
+        <module>common-redis</module>
+        <module>common-notify</module>
     </modules>
 
     <dependencies>

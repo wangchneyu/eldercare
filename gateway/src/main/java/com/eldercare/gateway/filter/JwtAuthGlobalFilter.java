@@ -2,9 +2,9 @@ package com.eldercare.gateway.filter;
 
 import com.eldercare.common.core.domain.R;
 import com.eldercare.common.core.exception.SystemErrorCode;
-import com.eldercare.security.constant.SecurityConstants;
-import com.eldercare.security.domain.LoginUser;
-import com.eldercare.security.jwt.JwtTokenProvider;
+import com.eldercare.common.security.constant.SecurityConstants;
+import com.eldercare.common.security.domain.LoginUser;
+import com.eldercare.common.security.jwt.JwtTokenProvider;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
