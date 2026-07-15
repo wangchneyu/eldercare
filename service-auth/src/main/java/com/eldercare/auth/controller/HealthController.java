@@ -2,12 +2,14 @@ package com.eldercare.auth.controller;
 
 import com.eldercare.common.core.domain.R;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
  * 健康探针 — 联调验证 Gateway 路由链路可达
  */
 @RestController
+@RequestMapping("/auth")
 public class HealthController {
 
     /**
