@@ -94,12 +94,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         // 2. 回退模式：本地验证并解析 JWT
         String token = extractToken(request);
         if (!StringUtils.hasText(token)) {
-            writeErrorResponse(response, "缺少认证令牌");
+            writeErrorResponse(response);
             return;
         }
 
         if (!jwtTokenProvider.validateToken(token)) {
-            writeErrorResponse(response, "认证令牌无效或已过期");
+            writeErrorResponse(response);
             return;
         }
 
@@ -139,12 +139,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     /**
      * 写出 JSON 格式 of 401 错误响应
      */
-    private void writeErrorResponse(HttpServletResponse response, String message) throws IOException {
+    private void writeErrorResponse(HttpServletResponse response) throws IOException {
         response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 
-        R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED.getCode(), message);
+        R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED);
         String json = objectMapper.writeValueAsString(result);
         response.getWriter().write(json);
     }

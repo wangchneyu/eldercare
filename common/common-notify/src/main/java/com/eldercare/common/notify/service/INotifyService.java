@@ -1,10 +1,10 @@
 package com.eldercare.common.notify.service;
 
 import com.eldercare.common.notify.dto.SmsRequest;
-import com.eldercare.common.notify.dto.WeChatRequest;
 import com.eldercare.common.notify.dto.VoiceRequest;
+import com.eldercare.common.notify.dto.WeChatRequest;
 
-public interface NotifyService {
+public interface INotifyService {
     /**
      * 发送短信
      * @param request 短信请求参数

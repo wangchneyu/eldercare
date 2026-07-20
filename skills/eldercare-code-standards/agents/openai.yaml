@@ -1,0 +1,4 @@
+interface:
+  display_name: "Eldercare Code Standards"
+  short_description: "审查并实施智慧养老平台 Java、接口、消息与数据边界规范"
+  default_prompt: "使用 $eldercare-code-standards 审查并修改当前代码，使其符合智慧养老平台规范。"

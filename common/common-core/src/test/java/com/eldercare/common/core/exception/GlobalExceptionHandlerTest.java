@@ -58,6 +58,11 @@ public class GlobalExceptionHandlerTest {
         public void throwUnknownException() {
             throw new RuntimeException("未知错误");
         }
+
+        @GetMapping("/test/remote-error")
+        public void throwRemoteCallException() {
+            throw new RemoteCallException(new IllegalStateException("connection refused"));
+        }
     }
 
     @Data
@@ -94,5 +99,13 @@ public class GlobalExceptionHandlerTest {
         String body = result.getResponse().getContentAsString();
         R<?> r = objectMapper.readValue(body, R.class);
         Assertions.assertEquals(SystemErrorCode.INTERNAL_ERROR.getCode(), r.getCode());
+    }
+
+    @Test
+    public void testHandleRemoteCallException() throws Exception {
+        mockMvc.perform(get("/test/remote-error"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value(SystemErrorCode.REMOTE_CALL_FAILED.getCode()))
+                .andExpect(jsonPath("$.msg").value(SystemErrorCode.REMOTE_CALL_FAILED.getMsg()));
     }
 }

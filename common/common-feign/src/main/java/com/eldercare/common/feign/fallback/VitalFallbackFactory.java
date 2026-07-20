@@ -1,7 +1,6 @@
 package com.eldercare.common.feign.fallback;
 
-import com.eldercare.common.core.exception.BizException;
-import com.eldercare.common.core.exception.SystemErrorCode;
+import com.eldercare.common.core.exception.RemoteCallException;
 import com.eldercare.common.feign.client.VitalClient;
 import com.eldercare.common.feign.dto.vital.VitalRecordRemoteDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -17,8 +16,8 @@ public class VitalFallbackFactory implements FallbackFactory<VitalClient> {
         log.error("Feign call to service-vital failed. Reason: {}", cause.getMessage(), cause);
         return new VitalClient() {
             @Override
-            public Boolean saveRecord(VitalRecordRemoteDTO record) {
-                throw new BizException(SystemErrorCode.REMOTE_CALL_FAILED, cause);
+            public VitalRecordRemoteDTO getLatestRecord(Long elderId) {
+                throw new RemoteCallException(cause);
             }
         };
     }

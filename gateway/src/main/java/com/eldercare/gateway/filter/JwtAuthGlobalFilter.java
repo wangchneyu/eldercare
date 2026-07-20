@@ -79,18 +79,18 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         // 2. 提取 Token
         String token = extractToken(exchange);
         if (!StringUtils.hasText(token)) {
-            return writeUnauthorized(exchange, "缺少认证令牌");
+            return writeUnauthorized(exchange);
         }
 
         // 3. 验证 Token 有效性
         if (!jwtTokenProvider.validateToken(token)) {
-            return writeUnauthorized(exchange, "认证令牌无效或已过期");
+            return writeUnauthorized(exchange);
         }
 
         // 4. 解析用户信息
         LoginUser loginUser = jwtTokenProvider.getLoginUser(token);
         if (loginUser == null) {
-            return writeUnauthorized(exchange, "无法解析用户身份信息");
+            return writeUnauthorized(exchange);
         }
 
         // 5. 存储到 exchange attributes（供同网关内其他 filter 使用）
@@ -154,14 +154,14 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     /**
      * 返回 401 JSON 错误响应，格式与 common-security 保持一致
      * <p>
-     * 响应体示例: {"code":110001, "msg":"缺少认证令牌", "data":null, "traceId":"..."}
+     * 响应体文案固定由 110001 错误码定义。
      */
-    private Mono<Void> writeUnauthorized(ServerWebExchange exchange, String message) {
+    private Mono<Void> writeUnauthorized(ServerWebExchange exchange) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED.getCode(), message);
+        R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED);
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(result);
             DataBuffer buffer = response.bufferFactory().wrap(bytes);

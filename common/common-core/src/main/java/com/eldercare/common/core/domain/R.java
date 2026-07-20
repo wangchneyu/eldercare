@@ -27,14 +27,6 @@ public class R<T> implements Serializable {
 
     // ========== 失败响应 ==========
 
-    public static <T> R<T> fail(String msg) {
-        return result(null, -1, msg);
-    }
-
-    public static <T> R<T> fail(int code, String msg) {
-        return result(null, code, msg);
-    }
-
     public static <T> R<T> fail(IErrorCode errorCode) {
         return result(null, errorCode.getCode(), errorCode.getMsg());
     }

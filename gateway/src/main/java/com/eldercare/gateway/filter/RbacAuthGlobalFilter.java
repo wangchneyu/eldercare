@@ -87,7 +87,7 @@ public class RbacAuthGlobalFilter implements GlobalFilter, Ordered {
         // 4. 检查用户是否拥有所需角色
         if (!loginUser.hasAnyRole(requiredRoles.toArray(new UserRole[0]))) {
             log.warn("RBAC 拒绝: 用户 {}(roles={}) 无权访问 {}", loginUser.getUsername(), loginUser.getRoles(), path);
-            return writeForbidden(exchange, "无权访问此资源");
+            return writeForbidden(exchange);
         }
 
         return chain.filter(exchange);
@@ -134,12 +134,12 @@ public class RbacAuthGlobalFilter implements GlobalFilter, Ordered {
     /**
      * 返回 403 JSON 错误响应
      */
-    private Mono<Void> writeForbidden(ServerWebExchange exchange, String message) {
+    private Mono<Void> writeForbidden(ServerWebExchange exchange) {
         ServerHttpResponse response = exchange.getResponse();
         response.setStatusCode(HttpStatus.FORBIDDEN);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        R<Void> result = R.fail(SystemErrorCode.FORBIDDEN.getCode(), message);
+        R<Void> result = R.fail(SystemErrorCode.FORBIDDEN);
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(result);
             DataBuffer buffer = response.bufferFactory().wrap(bytes);

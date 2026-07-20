@@ -31,20 +31,6 @@ public class RTest {
     }
 
     @Test
-    public void testFailWithMsg() {
-        R<Void> result = R.fail("自定义错误");
-        Assertions.assertEquals(-1, result.getCode());
-        Assertions.assertEquals("自定义错误", result.getMsg());
-    }
-
-    @Test
-    public void testFailWithCodeAndMsg() {
-        R<Void> result = R.fail(500, "服务器错误");
-        Assertions.assertEquals(500, result.getCode());
-        Assertions.assertEquals("服务器错误", result.getMsg());
-    }
-
-    @Test
     public void testTraceIdNotNull() {
         // traceId 可能为 null（MDC 未初始化时），不强制断言非 null
         // 但 R 对象本身不应为 null

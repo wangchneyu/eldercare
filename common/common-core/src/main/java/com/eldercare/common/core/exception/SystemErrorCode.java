@@ -18,7 +18,7 @@ public enum SystemErrorCode implements IErrorCode {
     REMOTE_CALL_FAILED(100007, "依赖服务暂不可用，请稍后再试", HttpStatus.BAD_GATEWAY),
     UNAUTHORIZED(110001, "登录状态已失效，请重新登录", HttpStatus.UNAUTHORIZED),
     FORBIDDEN(110002, "无权执行此操作", HttpStatus.FORBIDDEN),
-    CONFLICT(110003, "数据已存在或冲突", HttpStatus.CONFLICT);
+    CONFLICT(100010, "数据已存在或冲突", HttpStatus.CONFLICT);
 
     private final int code;
     private final String msg;

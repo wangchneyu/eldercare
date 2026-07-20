@@ -3,7 +3,7 @@ package com.eldercare.common.file.service.impl;
 import com.eldercare.common.core.exception.BizException;
 import com.eldercare.common.core.exception.SystemErrorCode;
 import com.eldercare.common.file.config.FileProperties;
-import com.eldercare.common.file.service.FileStorageService;
+import com.eldercare.common.file.service.IFileStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -17,7 +17,7 @@ import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
-public class LocalFileStorageServiceImpl implements FileStorageService {
+public class LocalFileStorageServiceImpl implements IFileStorageService {
 
     private final FileProperties fileProperties;
     private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");

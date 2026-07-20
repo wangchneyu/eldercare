@@ -1,5 +1,6 @@
 package com.eldercare.gateway.filter;
 
+import com.eldercare.common.core.exception.SystemErrorCode;
 import com.eldercare.common.security.domain.LoginUser;
 import com.eldercare.common.security.domain.UserRole;
 import com.eldercare.common.security.jwt.JwtTokenProvider;
@@ -52,7 +53,7 @@ class JwtAuthGlobalFilterTest {
                 .expectStatus().isUnauthorized()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(110001)
-                .jsonPath("$.msg").isEqualTo("缺少认证令牌");
+                .jsonPath("$.msg").isEqualTo(SystemErrorCode.UNAUTHORIZED.getMsg());
     }
 
     // ==================== 场景 2: 无效 Token → 401 ====================
@@ -65,7 +66,7 @@ class JwtAuthGlobalFilterTest {
                 .expectStatus().isUnauthorized()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(110001)
-                .jsonPath("$.msg").isEqualTo("认证令牌无效或已过期");
+                .jsonPath("$.msg").isEqualTo(SystemErrorCode.UNAUTHORIZED.getMsg());
     }
 
     // ==================== 场景 3: 正常 Token → 200 + 透传 Header ====================

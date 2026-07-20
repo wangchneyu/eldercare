@@ -2,7 +2,7 @@ package com.eldercare.common.file.service;
 
 import java.io.InputStream;
 
-public interface FileStorageService {
+public interface IFileStorageService {
     /**
      * 上传文件
      * @param inputStream 文件输入流

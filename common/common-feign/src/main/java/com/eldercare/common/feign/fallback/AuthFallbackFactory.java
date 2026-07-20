@@ -1,7 +1,6 @@
 package com.eldercare.common.feign.fallback;
 
-import com.eldercare.common.core.exception.BizException;
-import com.eldercare.common.core.exception.SystemErrorCode;
+import com.eldercare.common.core.exception.RemoteCallException;
 import com.eldercare.common.feign.client.AuthClient;
 import com.eldercare.common.feign.dto.auth.UserRemoteDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -18,12 +17,12 @@ public class AuthFallbackFactory implements FallbackFactory<AuthClient> {
         return new AuthClient() {
             @Override
             public UserRemoteDTO getUserInfo(String username) {
-                throw new BizException(SystemErrorCode.REMOTE_CALL_FAILED, cause);
+                throw new RemoteCallException(cause);
             }
 
             @Override
             public Boolean validateToken(String token) {
-                throw new BizException(SystemErrorCode.REMOTE_CALL_FAILED, cause);
+                throw new RemoteCallException(cause);
             }
         };
     }

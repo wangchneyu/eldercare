@@ -3,7 +3,7 @@ package com.eldercare.common.file.service.impl;
 import com.eldercare.common.core.exception.BizException;
 import com.eldercare.common.core.exception.SystemErrorCode;
 import com.eldercare.common.file.config.FileProperties;
-import com.eldercare.common.file.service.FileStorageService;
+import com.eldercare.common.file.service.IFileStorageService;
 import com.qcloud.cos.COSClient;
 import com.qcloud.cos.ClientConfig;
 import com.qcloud.cos.auth.BasicCOSCredentials;
@@ -26,7 +26,7 @@ import java.util.UUID;
 
 @Slf4j
 @RequiredArgsConstructor
-public class CosFileStorageServiceImpl implements FileStorageService {
+public class CosFileStorageServiceImpl implements IFileStorageService {
 
     private final FileProperties fileProperties;
     private COSClient cosClient;

@@ -1,7 +1,7 @@
 package com.eldercare.common.file;
 
 import com.eldercare.common.file.config.FileProperties;
-import com.eldercare.common.file.service.FileStorageService;
+import com.eldercare.common.file.service.IFileStorageService;
 import com.eldercare.common.file.service.impl.LocalFileStorageServiceImpl;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +20,7 @@ import static org.junit.jupiter.api.Assertions.*;
 
 public class FileStorageServiceTest {
 
-    private FileStorageService fileStorageService;
+    private IFileStorageService fileStorageService;
     private FileProperties fileProperties;
 
     @TempDir

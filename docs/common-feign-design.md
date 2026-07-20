@@ -12,10 +12,11 @@
 
 2. **接口传输约束**：
    - 根据《错误码及异常设计》，**Feign 接口不使用 REST 的 `R<T>` 统一包装对象，直接返回原始数据类型**（如 `UserRemoteDTO` 或 `Boolean`）。
+   - Feign 示例和正式契约只允许声明用户请求链路中的只读、低延迟查询。创建、更新、删除、状态变更和跨服务业务编排必须通过 MQ 事件或经过架构评审的强一致方案实现，不得在本模块声明写接口。
    - 服务端 Controller 独立声明，**绝对不要继承或实现 Feign Client 接口**，以确保服务提供方内部代码重构时不会直接对消费方造成破坏性编译阻断。
 
 3. **异常处理与熔断降级**：
-   - Feign 客户端的熔断处理类必须实现 `FallbackFactory<T>`，在远程调用异常（如超时、熔断、5xx 错误）时，直接**记录原始异常堆栈并抛出 `BizException(SystemErrorCode.REMOTE_CALL_FAILED, cause)`**。
+   - Feign 客户端的熔断处理类必须实现 `FallbackFactory<T>`，在远程调用异常（如超时、熔断、5xx 错误）时，记录原始异常堆栈并抛出 `RemoteCallException`。`BizException` 只用于可预期的领域规则失败。
    - 消费方服务通过全局异常处理器（`GlobalExceptionHandler`）拦截该异常，并按标准转为 `100007` 响应体返回给客户端。
 
 ---
@@ -144,5 +145,5 @@ public class CareServiceImpl implements ICareService {
 ## 五、契约修改规范
 
 1. **追加字段**：各端开发人员若需要新的数据字段，可直接修改 [dto](file:///e:/tmp/eldercare-platform/common/common-feign/src/main/java/com/eldercare/common/feign/dto) 下的 `RemoteDTO` 类。追加字段**不能添加强制校验注解（如 `@NotNull`）**，否则会造成旧版本服务调用时解析参数校验报错。
-2. **新增 API**：在对应的 `XxxClient` 下新增 mapping 路径，同时在对应的 `XxxFallbackFactory` 里**同步实现空重写并抛出远程调用失败异常**。
+2. **新增 API**：只允许新增只读查询 mapping；在对应的 `XxxFallbackFactory` 里同步实现并抛出 `RemoteCallException`。跨服务写操作不得加入 Feign Client。
 3. **安全审计规范**：根据《代码规范文档》，Feign 调用严禁传递或打印密码、Token 等敏感字眼，打印调试日志时，应对核心敏感参数做手动脱敏。

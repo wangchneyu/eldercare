@@ -30,7 +30,7 @@ public class GlobalExceptionHandler {
                 .orElse("参数校验失败");
         log.warn("参数校验失败: {}", msg);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(R.fail(SystemErrorCode.VALIDATION_ERROR.getCode(), msg));
+                .body(R.fail(SystemErrorCode.VALIDATION_ERROR));
     }
 
     @ExceptionHandler(HttpMessageNotReadableException.class)
@@ -44,8 +44,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<R<Void>> handleMissingParam(MissingServletRequestParameterException e) {
         log.warn("缺少必需参数: {}", e.getParameterName());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(R.fail(SystemErrorCode.BAD_REQUEST.getCode(),
-                        "缺少必需参数: " + e.getParameterName()));
+                .body(R.fail(SystemErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler(RemoteCallException.class)
+    public ResponseEntity<R<Void>> handleRemoteCallException(RemoteCallException e) {
+        log.error("远程依赖调用失败", e);
+        return ResponseEntity.status(SystemErrorCode.REMOTE_CALL_FAILED.getHttpStatus())
+                .body(R.fail(SystemErrorCode.REMOTE_CALL_FAILED));
     }
 
     @ExceptionHandler(Exception.class)

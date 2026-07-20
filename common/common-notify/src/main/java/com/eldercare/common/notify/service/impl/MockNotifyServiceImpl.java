@@ -3,11 +3,11 @@ package com.eldercare.common.notify.service.impl;
 import com.eldercare.common.notify.dto.SmsRequest;
 import com.eldercare.common.notify.dto.WeChatRequest;
 import com.eldercare.common.notify.dto.VoiceRequest;
-import com.eldercare.common.notify.service.NotifyService;
+import com.eldercare.common.notify.service.INotifyService;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class MockNotifyServiceImpl implements NotifyService {
+public class MockNotifyServiceImpl implements INotifyService {
 
     @Override
     public void sendSms(SmsRequest request) {

@@ -1,7 +1,6 @@
 package com.eldercare.common.feign.fallback;
 
-import com.eldercare.common.core.exception.BizException;
-import com.eldercare.common.core.exception.SystemErrorCode;
+import com.eldercare.common.core.exception.RemoteCallException;
 import com.eldercare.common.feign.client.CareClient;
 import com.eldercare.common.feign.dto.care.CarePlanRemoteDTO;
 import lombok.extern.slf4j.Slf4j;
@@ -18,7 +17,7 @@ public class CareFallbackFactory implements FallbackFactory<CareClient> {
         return new CareClient() {
             @Override
             public CarePlanRemoteDTO getCarePlan(Long planId) {
-                throw new BizException(SystemErrorCode.REMOTE_CALL_FAILED, cause);
+                throw new RemoteCallException(cause);
             }
         };
     }

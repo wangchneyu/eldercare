@@ -1,5 +1,6 @@
 package com.eldercare.gateway.filter;
 
+import com.eldercare.common.core.exception.SystemErrorCode;
 import com.eldercare.gateway.GatewayApplication;
 import com.eldercare.common.security.domain.LoginUser;
 import com.eldercare.common.security.domain.UserRole;
@@ -65,7 +66,7 @@ class RbacAuthGlobalFilterTest {
                 .expectStatus().isForbidden()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(110002)
-                .jsonPath("$.msg").isEqualTo("无权访问此资源");
+                .jsonPath("$.msg").isEqualTo(SystemErrorCode.FORBIDDEN.getMsg());
     }
 
     @Test
@@ -79,7 +80,7 @@ class RbacAuthGlobalFilterTest {
                 .expectStatus().isForbidden()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(110002)
-                .jsonPath("$.msg").isEqualTo("无权访问此资源");
+                .jsonPath("$.msg").isEqualTo(SystemErrorCode.FORBIDDEN.getMsg());
     }
 
     @Test

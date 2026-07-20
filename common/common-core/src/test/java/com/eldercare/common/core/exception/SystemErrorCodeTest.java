@@ -24,6 +24,6 @@ public class SystemErrorCodeTest {
     public void testSpecificErrorCodes() {
         Assertions.assertEquals(100001, SystemErrorCode.INTERNAL_ERROR.getCode());
         Assertions.assertEquals(100009, SystemErrorCode.NOT_FOUND.getCode());
-        Assertions.assertEquals(110003, SystemErrorCode.CONFLICT.getCode());
+        Assertions.assertEquals(100010, SystemErrorCode.CONFLICT.getCode());
     }
 }

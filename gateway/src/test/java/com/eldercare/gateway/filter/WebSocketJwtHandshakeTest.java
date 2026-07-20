@@ -1,5 +1,6 @@
 package com.eldercare.gateway.filter;
 
+import com.eldercare.common.core.exception.SystemErrorCode;
 import com.eldercare.gateway.GatewayApplication;
 import com.eldercare.common.security.domain.LoginUser;
 import com.eldercare.common.security.domain.UserRole;
@@ -55,7 +56,7 @@ class WebSocketJwtHandshakeTest {
                 .expectStatus().isUnauthorized()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(110001)
-                .jsonPath("$.msg").isEqualTo("缺少认证令牌");
+                .jsonPath("$.msg").isEqualTo(SystemErrorCode.UNAUTHORIZED.getMsg());
     }
 
     // ==================== 无效 Token → 401 ====================
@@ -69,7 +70,7 @@ class WebSocketJwtHandshakeTest {
                 .expectStatus().isUnauthorized()
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(110001)
-                .jsonPath("$.msg").isEqualTo("认证令牌无效或已过期");
+                .jsonPath("$.msg").isEqualTo(SystemErrorCode.UNAUTHORIZED.getMsg());
     }
 
     // ==================== 有效 Token → 200 + 身份回显 ====================

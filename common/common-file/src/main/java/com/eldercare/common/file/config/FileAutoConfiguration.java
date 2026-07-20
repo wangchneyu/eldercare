@@ -1,6 +1,6 @@
 package com.eldercare.common.file.config;
 
-import com.eldercare.common.file.service.FileStorageService;
+import com.eldercare.common.file.service.IFileStorageService;
 import com.eldercare.common.file.service.impl.LocalFileStorageServiceImpl;
 import com.eldercare.common.file.service.impl.CosFileStorageServiceImpl;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -17,13 +17,13 @@ public class FileAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "eldercare.file", name = "type", havingValue = "local", matchIfMissing = true)
-    public FileStorageService localFileStorageService(FileProperties fileProperties) {
+    public IFileStorageService localFileStorageService(FileProperties fileProperties) {
         return new LocalFileStorageServiceImpl(fileProperties);
     }
 
     @Bean
     @ConditionalOnProperty(prefix = "eldercare.file", name = "type", havingValue = "cos")
-    public FileStorageService cosFileStorageService(FileProperties fileProperties) {
+    public IFileStorageService cosFileStorageService(FileProperties fileProperties) {
         return new CosFileStorageServiceImpl(fileProperties);
     }
 }

@@ -4,7 +4,7 @@
 
 本阶段只开发 `common-core`：公共枚举（告警等级、任务状态、照护等级、角色类型、事件来源）与日期、ID、脱敏工具。不包含 Redis、分布式 Snowflake workerId、鉴权、事件发布和数据库映射。
 
-现有 `R<T>`、异常体系、`BaseEntity`、`BaseEvent`、`TraceContext` 保持不变。已有 `DesensitizeUtil.mobilePhone` 保留并扩展。
+现有 `BaseEntity`、`TraceContext` 保持不变。`R<T>` 只保留基于 `IErrorCode` 的失败工厂；异常体系增加 `RemoteCallException`；`BaseEvent` 增加独立的 `schemaVersion` 字段，以符合统一错误与 MQ 契约。已有 `DesensitizeUtil.mobilePhone` 保留并扩展。
 
 ## 建议代码结构
 
@@ -98,7 +98,7 @@ public static String address(String value);
 - 日期：UTC/上海时区转换、闰年、跨日、解析失败与逾期边界。
 - ID：批量生成无重复、前缀格式正确。
 - 脱敏：null、空值、合法值、异常长度与格式。
-- 不改变现有公共响应、异常、事件基类的行为。
+- 公共响应只能输出已登记错误码；远程调用异常映射为 `100007`；事件基类必须包含独立 `schemaVersion`。
 
 ## 待确认的设计问题
 

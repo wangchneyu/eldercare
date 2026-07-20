@@ -3,7 +3,7 @@ package com.eldercare.common.notify;
 import com.eldercare.common.notify.dto.SmsRequest;
 import com.eldercare.common.notify.dto.WeChatRequest;
 import com.eldercare.common.notify.dto.VoiceRequest;
-import com.eldercare.common.notify.service.NotifyService;
+import com.eldercare.common.notify.service.INotifyService;
 import com.eldercare.common.notify.service.impl.MockNotifyServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 public class NotifyServiceTest {
 
-    private NotifyService notifyService;
+    private INotifyService notifyService;
 
     @BeforeEach
     public void setUp() {

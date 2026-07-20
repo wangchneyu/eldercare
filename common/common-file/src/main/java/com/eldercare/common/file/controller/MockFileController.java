@@ -1,6 +1,6 @@
 package com.eldercare.common.file.controller;
 
-import com.eldercare.common.file.service.FileStorageService;
+import com.eldercare.common.file.service.IFileStorageService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +21,7 @@ import java.nio.file.Paths;
 @ConditionalOnProperty(prefix = "eldercare.file", name = "type", havingValue = "local", matchIfMissing = true)
 public class MockFileController {
 
-    private final FileStorageService fileStorageService;
+    private final IFileStorageService fileStorageService;
 
     @GetMapping("/files/preview/**")
     public void preview(HttpServletRequest request, HttpServletResponse response) {

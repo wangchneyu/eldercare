@@ -1,6 +1,6 @@
 package com.eldercare.common.notify.config;
 
-import com.eldercare.common.notify.service.NotifyService;
+import com.eldercare.common.notify.service.INotifyService;
 import com.eldercare.common.notify.service.impl.MockNotifyServiceImpl;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -13,7 +13,7 @@ public class NotifyAutoConfiguration {
 
     @Bean
     @ConditionalOnProperty(prefix = "eldercare.notify", name = "type", havingValue = "mock", matchIfMissing = true)
-    public NotifyService mockNotifyService() {
+    public INotifyService mockNotifyService() {
         return new MockNotifyServiceImpl();
     }
 }
