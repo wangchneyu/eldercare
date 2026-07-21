@@ -2,6 +2,7 @@ package com.eldercare.gateway.filter;
 
 import com.eldercare.common.core.domain.R;
 import com.eldercare.common.core.exception.SystemErrorCode;
+import com.eldercare.common.core.utils.IdUtil;
 import com.eldercare.common.security.constant.SecurityConstants;
 import com.eldercare.common.security.domain.LoginUser;
 import com.eldercare.common.security.jwt.JwtTokenProvider;
@@ -61,6 +62,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     private static final String HEADER_USER_ID = "X-User-Id";
     private static final String HEADER_USERNAME = "X-Username";
     private static final String HEADER_USER_ROLES = "X-User-Roles";
+    private static final String HEADER_TRACE_ID = "X-Trace-Id";
 
     public JwtAuthGlobalFilter(JwtTokenProvider jwtTokenProvider, ObjectMapper objectMapper) {
         this.jwtTokenProvider = jwtTokenProvider;
@@ -71,9 +73,16 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
+        // 0. 提取或生成 traceId（最先执行，确保全链路可追踪）
+        String traceId = exchange.getRequest().getHeaders().getFirst(HEADER_TRACE_ID);
+        if (!StringUtils.hasText(traceId)) {
+            traceId = IdUtil.uuid32();
+        }
+        exchange.getAttributes().put("traceId", traceId);
+
         // 1. 白名单路径直接放行
         if (isWhitelisted(path)) {
-            return chain.filter(exchange);
+            return chain.filter(withTraceIdHeader(exchange, traceId));
         }
 
         // 2. 提取 Token
@@ -96,7 +105,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         // 5. 存储到 exchange attributes（供同网关内其他 filter 使用）
         exchange.getAttributes().put("loginUser", loginUser);
 
-        // 6. 透传用户信息给下游服务 — 先清除外部传入的 X-User-* 头（防伪造），再设置真实值
+        // 6. 透传用户信息 + traceId 给下游服务 — 先清除外部传入的 X-User-* / X-Trace-Id 头（防伪造），再设置真实值
         String rolesStr = loginUser.getRoles() != null
                 ? String.join(",", loginUser.getRoles().stream().map(Enum::name).toList())
                 : "";
@@ -106,10 +115,12 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
                     headers.remove(HEADER_USER_ID);
                     headers.remove(HEADER_USERNAME);
                     headers.remove(HEADER_USER_ROLES);
+                    headers.remove(HEADER_TRACE_ID);
                 })
                 .header(HEADER_USER_ID, String.valueOf(loginUser.getUserId()))
                 .header(HEADER_USERNAME, loginUser.getUsername())
                 .header(HEADER_USER_ROLES, rolesStr)
+                .header(HEADER_TRACE_ID, traceId)
                 .build();
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
@@ -161,7 +172,12 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
+        // 显式设置 traceId（WebFlux 环境下 ThreadLocal MDC 不可用）
+        String traceId = exchange.getAttribute("traceId");
         R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED);
+        if (StringUtils.hasText(traceId)) {
+            result.setTraceId(traceId);
+        }
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(result);
             DataBuffer buffer = response.bufferFactory().wrap(bytes);
@@ -170,5 +186,16 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             log.error("序列化 401 响应失败", e);
             return response.setComplete();
         }
+    }
+
+    /**
+     * 为白名单路径请求透传 traceId 头到下游
+     */
+    private ServerWebExchange withTraceIdHeader(ServerWebExchange exchange, String traceId) {
+        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+                .headers(headers -> headers.remove(HEADER_TRACE_ID))
+                .header(HEADER_TRACE_ID, traceId)
+                .build();
+        return exchange.mutate().request(mutatedRequest).build();
     }
 }

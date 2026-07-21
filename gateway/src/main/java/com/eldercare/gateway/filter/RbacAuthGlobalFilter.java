@@ -18,6 +18,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
 import org.springframework.util.AntPathMatcher;
+import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
@@ -139,7 +140,12 @@ public class RbacAuthGlobalFilter implements GlobalFilter, Ordered {
         response.setStatusCode(HttpStatus.FORBIDDEN);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
+        // 显式设置 traceId（WebFlux 环境下 ThreadLocal MDC 不可用）
+        String traceId = exchange.getAttribute("traceId");
         R<Void> result = R.fail(SystemErrorCode.FORBIDDEN);
+        if (StringUtils.hasText(traceId)) {
+            result.setTraceId(traceId);
+        }
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(result);
             DataBuffer buffer = response.bufferFactory().wrap(bytes);

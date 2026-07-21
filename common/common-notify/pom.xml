@@ -10,6 +10,7 @@
     </parent>
 
     <artifactId>common-notify</artifactId>
+    <description>实时通知通道模块 — 短信(SMS)、语音(Voice)、微信(WeChat)推送。不包含邮件(Email)通知</description>
 
     <dependencies>
         <!-- 引入 common-core 基础库 -->

@@ -5,13 +5,19 @@ import com.alibaba.csp.sentinel.adapter.gateway.common.api.ApiPathPredicateItem;
 import com.alibaba.csp.sentinel.adapter.gateway.common.api.GatewayApiDefinitionManager;
 import com.alibaba.csp.sentinel.adapter.gateway.common.rule.GatewayFlowRule;
 import com.alibaba.csp.sentinel.adapter.gateway.common.rule.GatewayRuleManager;
+import com.alibaba.csp.sentinel.datasource.Converter;
+import com.alibaba.csp.sentinel.datasource.ReadableDataSource;
+import com.alibaba.csp.sentinel.datasource.nacos.NacosDataSource;
 import com.alibaba.csp.sentinel.slots.block.BlockException;
+import com.alibaba.csp.sentinel.slots.block.flow.FlowRule;
 import com.eldercare.common.core.domain.R;
 import com.eldercare.common.core.exception.SystemErrorCode;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
@@ -24,14 +30,17 @@ import reactor.core.publisher.Mono;
 
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
  * Sentinel 网关限流配置
  * <p>
- * 为 5 条 HTTP 路由定义流控规则（QPS 上限），WebSocket 路由由 WebSocketConnectionLimitFilter 独立管控。
+ * 为 8 条 HTTP 路由定义流控规则（QPS 上限），WebSocket 路由由 WebSocketConnectionLimitFilter 独立管控。
  * <p>
- * 规则在 @PostConstruct 中硬编码加载 — 不依赖 Sentinel Dashboard，确保 Dashboard 不可用时限流仍生效。
+ * 规则来源优先级: Nacos 动态规则 > 硬编码兜底规则。
+ * 应用启动时先加载硬编码规则作为兜底，再尝试从 Nacos 拉取动态规则，拉取成功后覆盖。
+ * 确保 Nacos 不可用时，限流仍然生效。
  */
 @Slf4j
 @Configuration
@@ -39,6 +48,17 @@ import java.util.Set;
 public class SentinelGatewayConfig {
 
     private final ObjectMapper objectMapper;
+
+    @Value("${spring.cloud.nacos.discovery.server-addr:127.0.0.1:8848}")
+    private String nacosServerAddr;
+
+    @Value("${spring.cloud.nacos.discovery.namespace:}")
+    private String nacosNamespace;
+
+    /** Nacos 网关流控规则 DataId */
+    private static final String GW_FLOW_DATA_ID = "gateway-sentinel-flow-rules.json";
+    /** Nacos 网关流控规则 Group */
+    private static final String GW_FLOW_GROUP = "SENTINEL_GROUP";
 
     /**
      * 自定义限流异常处理器 — 返回统一 JSON 格式:
@@ -73,13 +93,22 @@ public class SentinelGatewayConfig {
     }
 
     /**
-     * 应用启动时加载硬编码的流控规则
+     * 应用启动时加载流控规则（硬编码兜底 + Nacos 动态规则）
+     * <p>
+     * 加载顺序: 先硬编码 API 分组和规则 → 再尝试注册 Nacos 动态数据源
+     * Nacos 可用时动态规则覆盖硬编码；不可用时硬编码规则保持生效
      */
     @PostConstruct
     public void initFlowRules() {
         initCustomizedApis();
         initGatewayFlowRules();
-        log.info("Sentinel 网关流控规则初始化完成: 5条HTTP路由, QPS上限=100");
+        log.info("Sentinel 网关流控规则（硬编码兜底）初始化完成: 8条HTTP路由, QPS上限=100");
+
+        try {
+            initNacosFlowDataSource();
+        } catch (Exception e) {
+            log.warn("Nacos 动态流控规则初始化失败，使用硬编码兜底规则。原因: {}", e.getMessage());
+        }
     }
 
     /**
@@ -93,6 +122,9 @@ public class SentinelGatewayConfig {
         definitions.add(buildApiDefinition("route-server", "/server/**"));
         definitions.add(buildApiDefinition("route-elderly", "/elderly/**"));
         definitions.add(buildApiDefinition("route-family", "/family/**"));
+        definitions.add(buildApiDefinition("route-vital", "/vital/**"));
+        definitions.add(buildApiDefinition("route-ai", "/ai/**"));
+        definitions.add(buildApiDefinition("route-alert", "/alert/**"));
 
         GatewayApiDefinitionManager.loadApiDefinitions(definitions);
     }
@@ -114,7 +146,8 @@ public class SentinelGatewayConfig {
     private void initGatewayFlowRules() {
         Set<GatewayFlowRule> rules = new HashSet<>();
 
-        String[] apiNames = {"route-auth", "route-admin", "route-server", "route-elderly", "route-family"};
+        String[] apiNames = {"route-auth", "route-admin", "route-server", "route-elderly",
+                "route-family", "route-vital", "route-ai", "route-alert"};
         for (String apiName : apiNames) {
             GatewayFlowRule rule = new GatewayFlowRule(apiName);
             rule.setCount(100);   // QPS 上限
@@ -123,5 +156,37 @@ public class SentinelGatewayConfig {
         }
 
         GatewayRuleManager.loadRules(rules);
+    }
+
+    /**
+     * 注册 Nacos 动态网关流控规则数据源
+     * <p>
+     * Nacos 规则 JSON 格式示例:
+     * <pre>{@code
+     * [
+     *   { "resource": "route-auth", "count": 100.0, "intervalSec": 1 },
+     *   { "resource": "route-admin", "count": 50.0, "intervalSec": 1 }
+     * ]
+     * }</pre>
+     * 规则变更后 ~30s 内生效（Nacos 推送 + Sentinel PropertyListener）
+     */
+    private void initNacosFlowDataSource() {
+        String groupId = GW_FLOW_GROUP;
+        String dataId = GW_FLOW_DATA_ID;
+
+        NacosDataSource<Set<GatewayFlowRule>> dataSource = new NacosDataSource<>(
+                nacosServerAddr, groupId, dataId,
+                source -> {
+                    try {
+                        return objectMapper.readValue(source, new TypeReference<Set<GatewayFlowRule>>() {});
+                    } catch (Exception e) {
+                        throw new RuntimeException("解析 Nacos 网关流控规则 JSON 失败", e);
+                    }
+                });
+
+        // 注册到 GatewayRuleManager，监听 Nacos 配置变更后自动更新
+        GatewayRuleManager.register2Property(dataSource.getProperty());
+        log.info("Nacos 网关流控规则数据源注册成功: serverAddr={}, group={}, dataId={}",
+                nacosServerAddr, groupId, dataId);
     }
 }

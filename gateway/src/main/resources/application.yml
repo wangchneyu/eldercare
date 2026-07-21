@@ -13,7 +13,7 @@ spring:
         locator:
           enabled: false
       routes:
-        # ==================== HTTP 路由 (5 组) ====================
+        # ==================== HTTP 路由 (8 组) ====================
 
         # 鉴权服务 — 登录/注册/刷新 Token
         - id: route-auth
@@ -44,6 +44,24 @@ spring:
           uri: lb://service-family
           predicates:
             - Path=/family/**
+
+        # 生命体征 — 体征数据查询/录入
+        - id: route-vital
+          uri: lb://service-vital
+          predicates:
+            - Path=/vital/**
+
+        # AI 推理 — 智能服务/ASR/TTS
+        - id: route-ai
+          uri: lb://service-ai
+          predicates:
+            - Path=/ai/**
+
+        # 告警服务 — SOS 预警/核销查询
+        - id: route-alert
+          uri: lb://service-alert
+          predicates:
+            - Path=/alert/**
 
         # ==================== WebSocket 路由 (2 组) ====================
 
@@ -112,6 +130,26 @@ eldercare:
           - ADMIN
           - FAMILY
       # /ws/alert/** 不在此配置 → 所有已认证用户均可访问
+      # 生命体征 — 体征数据
+      - paths:
+          - /vital/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+          - OPERATOR
+      # AI 推理 — 智能服务
+      - paths:
+          - /ai/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+      # 告警服务 — SOS 预警/核销查询
+      - paths:
+          - /alert/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+          - OPERATOR
 
 # ==================== 日志 ====================
 logging:
