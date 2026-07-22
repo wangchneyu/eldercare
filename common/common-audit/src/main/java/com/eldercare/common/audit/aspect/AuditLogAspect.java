@@ -1,6 +1,7 @@
 package com.eldercare.common.audit.aspect;
 
 import com.eldercare.common.audit.annotation.AuditLog;
+import com.eldercare.common.core.utils.TraceContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
@@ -24,7 +25,11 @@ import java.util.Map;
 @Slf4j
 public class AuditLogAspect {
 
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    public AuditLogAspect(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Around("@annotation(auditLog)")
     public Object around(ProceedingJoinPoint joinPoint, AuditLog auditLog) throws Throwable {
@@ -70,6 +75,7 @@ public class AuditLogAspect {
             // 5. 格式化记录日志
             Map<String, Object> auditMap = new HashMap<>();
             auditMap.put("operation", auditLog.value());
+            auditMap.put("traceId", TraceContext.currentTraceId() != null ? TraceContext.currentTraceId() : "N/A");
             auditMap.put("userId", userId != null ? userId : "Anonymous");
             auditMap.put("username", username != null ? username : "Anonymous");
             auditMap.put("clientIp", clientIp);

@@ -1,0 +1,752 @@
+﻿diff --git a/common/common-audit/src/main/java/com/eldercare/common/audit/aspect/AuditLogAspect.java b/common/common-audit/src/main/java/com/eldercare/common/audit/aspect/AuditLogAspect.java
+index 2e815fd..53181dc 100644
+--- a/common/common-audit/src/main/java/com/eldercare/common/audit/aspect/AuditLogAspect.java
++++ b/common/common-audit/src/main/java/com/eldercare/common/audit/aspect/AuditLogAspect.java
+@@ -1,6 +1,7 @@
+ package com.eldercare.common.audit.aspect;
+ 
+ import com.eldercare.common.audit.annotation.AuditLog;
++import com.eldercare.common.core.utils.TraceContext;
+ import com.fasterxml.jackson.databind.ObjectMapper;
+ import jakarta.servlet.ServletRequest;
+ import jakarta.servlet.ServletResponse;
+@@ -24,7 +25,11 @@ import java.util.Map;
+ @Slf4j
+ public class AuditLogAspect {
+ 
+-    private final ObjectMapper objectMapper = new ObjectMapper();
++    private final ObjectMapper objectMapper;
++
++    public AuditLogAspect(ObjectMapper objectMapper) {
++        this.objectMapper = objectMapper;
++    }
+ 
+     @Around("@annotation(auditLog)")
+     public Object around(ProceedingJoinPoint joinPoint, AuditLog auditLog) throws Throwable {
+@@ -70,6 +75,7 @@ public class AuditLogAspect {
+             // 5. 格式化记录日志
+             Map<String, Object> auditMap = new HashMap<>();
+             auditMap.put("operation", auditLog.value());
++            auditMap.put("traceId", TraceContext.currentTraceId() != null ? TraceContext.currentTraceId() : "N/A");
+             auditMap.put("userId", userId != null ? userId : "Anonymous");
+             auditMap.put("username", username != null ? username : "Anonymous");
+             auditMap.put("clientIp", clientIp);
+diff --git a/common/common-audit/src/main/java/com/eldercare/common/audit/config/AuditAutoConfiguration.java b/common/common-audit/src/main/java/com/eldercare/common/audit/config/AuditAutoConfiguration.java
+index 63ece6e..765b0a9 100644
+--- a/common/common-audit/src/main/java/com/eldercare/common/audit/config/AuditAutoConfiguration.java
++++ b/common/common-audit/src/main/java/com/eldercare/common/audit/config/AuditAutoConfiguration.java
+@@ -1,6 +1,7 @@
+ package com.eldercare.common.audit.config;
+ 
+ import com.eldercare.common.audit.aspect.AuditLogAspect;
++import com.fasterxml.jackson.databind.ObjectMapper;
+ import org.springframework.context.annotation.Bean;
+ import org.springframework.context.annotation.Configuration;
+ import org.springframework.context.annotation.EnableAspectJAutoProxy;
+@@ -10,7 +11,7 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
+ public class AuditAutoConfiguration {
+ 
+     @Bean
+-    public AuditLogAspect auditLogAspect() {
+-        return new AuditLogAspect();
++    public AuditLogAspect auditLogAspect(ObjectMapper objectMapper) {
++        return new AuditLogAspect(objectMapper);
+     }
+ }
+diff --git a/common/common-core/pom.xml b/common/common-core/pom.xml
+index ef1b276..0925648 100644
+--- a/common/common-core/pom.xml
++++ b/common/common-core/pom.xml
+@@ -51,6 +51,20 @@
+             <artifactId>slf4j-api</artifactId>
+         </dependency>
+ 
++        <!-- Spring Security Core（AccessDeniedException 处理，optional 不传递给下游） -->
++        <dependency>
++            <groupId>org.springframework.security</groupId>
++            <artifactId>spring-security-core</artifactId>
++            <optional>true</optional>
++        </dependency>
++
++        <!-- RocketMQ（MQ 基础设施，optional 不传递给下游） -->
++        <dependency>
++            <groupId>org.apache.rocketmq</groupId>
++            <artifactId>rocketmq-spring-boot-starter</artifactId>
++            <optional>true</optional>
++        </dependency>
++
+         <dependency>
+             <groupId>org.projectlombok</groupId>
+             <artifactId>lombok</artifactId>
+diff --git a/common/common-core/src/main/java/com/eldercare/common/core/domain/R.java b/common/common-core/src/main/java/com/eldercare/common/core/domain/R.java
+index 3aecc4f..b5fbbae 100644
+--- a/common/common-core/src/main/java/com/eldercare/common/core/domain/R.java
++++ b/common/common-core/src/main/java/com/eldercare/common/core/domain/R.java
+@@ -31,6 +31,14 @@ public class R<T> implements Serializable {
+         return result(null, errorCode.getCode(), errorCode.getMsg());
+     }
+ 
++    public static <T> R<T> fail(int code, String msg) {
++        return result(null, code, msg);
++    }
++
++    public static <T> R<T> fail(IErrorCode errorCode, T data) {
++        return result(data, errorCode.getCode(), errorCode.getMsg());
++    }
++
+     private static <T> R<T> result(T data, int code, String msg) {
+         R<T> result = new R<>();
+         result.setCode(code);
+diff --git a/common/common-core/src/main/java/com/eldercare/common/core/exception/GlobalExceptionHandler.java b/common/common-core/src/main/java/com/eldercare/common/core/exception/GlobalExceptionHandler.java
+index acfd3e5..5896db7 100644
+--- a/common/common-core/src/main/java/com/eldercare/common/core/exception/GlobalExceptionHandler.java
++++ b/common/common-core/src/main/java/com/eldercare/common/core/exception/GlobalExceptionHandler.java
+@@ -1,11 +1,14 @@
+ package com.eldercare.common.core.exception;
+ 
+ import com.eldercare.common.core.domain.R;
++import com.eldercare.common.core.utils.DesensitizeUtil;
+ import lombok.extern.slf4j.Slf4j;
+ import org.springframework.http.HttpStatus;
+ import org.springframework.http.ResponseEntity;
+ import org.springframework.http.converter.HttpMessageNotReadableException;
++import org.springframework.security.access.AccessDeniedException;
+ import org.springframework.validation.BindException;
++import org.springframework.validation.FieldError;
+ import org.springframework.web.HttpMediaTypeNotSupportedException;
+ import org.springframework.web.HttpRequestMethodNotSupportedException;
+ import org.springframework.web.bind.MethodArgumentNotValidException;
+@@ -14,15 +17,17 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
+ import org.springframework.web.bind.annotation.RestControllerAdvice;
+ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+ 
++import java.util.List;
++import java.util.Map;
++
+ /**
+  * 全局异常处理器 (MVC)
+  * <p>
+  * 对齐《错误码及异常设计》三、异常分类表
+  * <p>
+- * 覆盖: BizException / 参数校验 / 类型转换 / 方法/媒体类型不支持 / 远程调用 / 未知异常
++ * 覆盖: BizException / 参数校验 / 类型转换 / 方法/媒体类型不支持 / 越权访问 / 远程调用 / 未知异常
+  * <p>
+- * 注意: 认证授权异常（AccessDeniedException 等）由 Gateway 过滤器和 common-security 拦截器处理，
+- * 不在本处理器范围。
++ * 注意: 认证异常（401）由 Gateway 过滤器和 common-security 拦截器处理，不在本处理器范围。
+  */
+ @Slf4j
+ @RestControllerAdvice
+@@ -40,25 +45,23 @@ public class GlobalExceptionHandler {
+     // ==================== 参数校验与类型转换 ====================
+ 
+     @ExceptionHandler(MethodArgumentNotValidException.class)
+-    public ResponseEntity<R<Void>> handleValidation(MethodArgumentNotValidException e) {
+-        String msg = e.getBindingResult().getFieldErrors().stream()
+-                .map(f -> f.getField() + ": " + f.getDefaultMessage())
+-                .reduce((a, b) -> a + "; " + b)
+-                .orElse("参数校验失败");
+-        log.warn("参数校验失败: {}", msg);
++    public ResponseEntity<R<List<Map<String, String>>>> handleValidation(MethodArgumentNotValidException e) {
++        List<Map<String, String>> fieldErrors = e.getBindingResult().getFieldErrors().stream()
++                .map(this::toFieldErrorMap)
++                .toList();
++        log.warn("参数校验失败: {}", fieldErrors);
+         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+-                .body(R.fail(SystemErrorCode.BAD_REQUEST.getCode(), msg));
++                .body(R.fail(SystemErrorCode.BAD_REQUEST, fieldErrors));
+     }
+ 
+     @ExceptionHandler(BindException.class)
+-    public ResponseEntity<R<Void>> handleBindException(BindException e) {
+-        String msg = e.getBindingResult().getFieldErrors().stream()
+-                .map(f -> f.getField() + ": " + f.getDefaultMessage())
+-                .reduce((a, b) -> a + "; " + b)
+-                .orElse("参数绑定失败");
+-        log.warn("参数绑定失败: {}", msg);
++    public ResponseEntity<R<List<Map<String, String>>>> handleBindException(BindException e) {
++        List<Map<String, String>> fieldErrors = e.getBindingResult().getFieldErrors().stream()
++                .map(this::toFieldErrorMap)
++                .toList();
++        log.warn("参数绑定失败: {}", fieldErrors);
+         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+-                .body(R.fail(SystemErrorCode.BAD_REQUEST.getCode(), msg));
++                .body(R.fail(SystemErrorCode.BAD_REQUEST, fieldErrors));
+     }
+ 
+     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+@@ -83,6 +86,15 @@ public class GlobalExceptionHandler {
+                 .body(R.fail(SystemErrorCode.BAD_REQUEST));
+     }
+ 
++    // ==================== 越权访问 ====================
++
++    @ExceptionHandler(AccessDeniedException.class)
++    public ResponseEntity<R<Void>> handleAccessDenied(AccessDeniedException e) {
++        log.warn("越权访问: {}", e.getMessage());
++        return ResponseEntity.status(HttpStatus.FORBIDDEN)
++                .body(R.fail(SystemErrorCode.FORBIDDEN));
++    }
++
+     // ==================== 请求方法与媒体类型 ====================
+ 
+     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+@@ -109,7 +121,7 @@ public class GlobalExceptionHandler {
+                 .body(R.fail(SystemErrorCode.REMOTE_CALL_FAILED));
+     }
+ 
+-    // ==================== 兜底 ====================
++    // ==================== 兖底 ====================
+ 
+     @ExceptionHandler(Exception.class)
+     public ResponseEntity<R<Void>> handleUnknown(Exception e) {
+@@ -117,4 +129,19 @@ public class GlobalExceptionHandler {
+         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                 .body(R.fail(SystemErrorCode.INTERNAL_ERROR));
+     }
++
++    // ==================== 内部工具 ====================
++
++    /**
++     * 将 FieldError 转为规范格式的 Map（含脱敏 rejectedValue）
++     */
++    private Map<String, String> toFieldErrorMap(FieldError f) {
++        String rejectedValue = f.getRejectedValue() != null
++                ? f.getRejectedValue().toString() : "null";
++        return Map.of(
++                "field", f.getField(),
++                "reason", f.getDefaultMessage() != null ? f.getDefaultMessage() : "校验失败",
++                "rejectedValue", DesensitizeUtil.mobilePhone(rejectedValue)
++        );
++    }
+ }
+diff --git a/common/common-core/src/main/java/com/eldercare/common/core/exception/SystemErrorCode.java b/common/common-core/src/main/java/com/eldercare/common/core/exception/SystemErrorCode.java
+index 4ec0056..e5a0319 100644
+--- a/common/common-core/src/main/java/com/eldercare/common/core/exception/SystemErrorCode.java
++++ b/common/common-core/src/main/java/com/eldercare/common/core/exception/SystemErrorCode.java
+@@ -15,12 +15,11 @@ public enum SystemErrorCode implements IErrorCode {
+     TOO_MANY_REQUESTS(100005, "请求过于频繁，请稍后再试", HttpStatus.TOO_MANY_REQUESTS),
+     SERVICE_UNAVAILABLE(100006, "服务暂不可用，请稍后再试", HttpStatus.SERVICE_UNAVAILABLE),
+     REMOTE_CALL_FAILED(100007, "依赖服务暂不可用，请稍后再试", HttpStatus.BAD_GATEWAY),
+-    NOT_FOUND(100008, "请求资源不存在", HttpStatus.NOT_FOUND),
++    NOT_FOUND(100009, "请求资源不存在", HttpStatus.NOT_FOUND),
+ 
+     // ==================== 认证与授权号段 110000–119999 ====================
+     UNAUTHORIZED(110001, "登录状态已失效，请重新登录", HttpStatus.UNAUTHORIZED),
+-    FORBIDDEN(110002, "无权执行此操作", HttpStatus.FORBIDDEN),
+-    CONFLICT(100010, "数据已存在或冲突", HttpStatus.CONFLICT);
++    FORBIDDEN(110002, "无权执行此操作", HttpStatus.FORBIDDEN);
+ 
+     private final int code;
+     private final String msg;
+diff --git a/common/common-core/src/test/java/com/eldercare/common/core/exception/GlobalExceptionHandlerTest.java b/common/common-core/src/test/java/com/eldercare/common/core/exception/GlobalExceptionHandlerTest.java
+index ea16f05..2ad6a61 100644
+--- a/common/common-core/src/test/java/com/eldercare/common/core/exception/GlobalExceptionHandlerTest.java
++++ b/common/common-core/src/test/java/com/eldercare/common/core/exception/GlobalExceptionHandlerTest.java
+@@ -86,7 +86,9 @@ public class GlobalExceptionHandlerTest {
+                         .contentType(MediaType.APPLICATION_JSON)
+                         .content(emptyBody))
+                 .andExpect(status().isBadRequest())
+-                .andExpect(jsonPath("$.code").value(SystemErrorCode.VALIDATION_ERROR.getCode()));
++                .andExpect(jsonPath("$.code").value(SystemErrorCode.BAD_REQUEST.getCode()))
++                .andExpect(jsonPath("$.data").isArray())
++                .andExpect(jsonPath("$.data[0].field").value("name"));
+     }
+ 
+     @Test
+diff --git a/common/common-core/src/test/java/com/eldercare/common/core/exception/SystemErrorCodeTest.java b/common/common-core/src/test/java/com/eldercare/common/core/exception/SystemErrorCodeTest.java
+index 6dd3256..b22cfb8 100644
+--- a/common/common-core/src/test/java/com/eldercare/common/core/exception/SystemErrorCodeTest.java
++++ b/common/common-core/src/test/java/com/eldercare/common/core/exception/SystemErrorCodeTest.java
+@@ -16,14 +16,14 @@ public class SystemErrorCodeTest {
+ 
+     @Test
+     public void testErrorCodeCount() {
+-        // 验证枚举数量：新增 VALIDATION_ERROR / NOT_FOUND / CONFLICT 后共 12 个
+-        Assertions.assertEquals(12, SystemErrorCode.values().length);
++        // 与《错误码及异常设计》2.2 节一致，共 9 个枚举值
++        Assertions.assertEquals(9, SystemErrorCode.values().length);
+     }
+ 
+     @Test
+     public void testSpecificErrorCodes() {
+         Assertions.assertEquals(100001, SystemErrorCode.INTERNAL_ERROR.getCode());
+         Assertions.assertEquals(100009, SystemErrorCode.NOT_FOUND.getCode());
+-        Assertions.assertEquals(100010, SystemErrorCode.CONFLICT.getCode());
++        Assertions.assertEquals(110002, SystemErrorCode.FORBIDDEN.getCode());
+     }
+ }
+diff --git a/common/common-notify/src/main/java/com/eldercare/common/notify/config/NotifyAutoConfiguration.java b/common/common-notify/src/main/java/com/eldercare/common/notify/config/NotifyAutoConfiguration.java
+index 7ca4ac7..7f0519b 100644
+--- a/common/common-notify/src/main/java/com/eldercare/common/notify/config/NotifyAutoConfiguration.java
++++ b/common/common-notify/src/main/java/com/eldercare/common/notify/config/NotifyAutoConfiguration.java
+@@ -1,6 +1,7 @@
+ package com.eldercare.common.notify.config;
+ 
+ import com.eldercare.common.notify.service.INotifyService;
++import com.eldercare.common.notify.service.impl.AliyunSmsNotifyServiceImpl;
+ import com.eldercare.common.notify.service.impl.MockNotifyServiceImpl;
+ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+ import org.springframework.boot.context.properties.EnableConfigurationProperties;
+@@ -16,4 +17,10 @@ public class NotifyAutoConfiguration {
+     public INotifyService mockNotifyService() {
+         return new MockNotifyServiceImpl();
+     }
++
++    @Bean
++    @ConditionalOnProperty(prefix = "eldercare.notify", name = "type", havingValue = "aliyun")
++    public INotifyService aliyunNotifyService() {
++        return new AliyunSmsNotifyServiceImpl();
++    }
+ }
+diff --git a/common/common-security/src/main/java/com/eldercare/common/security/config/SecurityProperties.java b/common/common-security/src/main/java/com/eldercare/common/security/config/SecurityProperties.java
+index a981379..2661621 100644
+--- a/common/common-security/src/main/java/com/eldercare/common/security/config/SecurityProperties.java
++++ b/common/common-security/src/main/java/com/eldercare/common/security/config/SecurityProperties.java
+@@ -36,9 +36,9 @@ public class SecurityProperties {
+ 
+     /**
+      * JWT 签名密钥
+-     * <p>HS256 要求密钥长度至少 256 bits（32 字符），生产环境请使用足够强度的密钥
++     * <p>HS256 要求密钥长度至少 256 bits（32 字符），生产环境必须通过环境变量 ELDERCARE_JWT_SECRET 注入
+      */
+-    private String secret = "ElderCarePlatform2024SecretKey!@#$%^";
++    private String secret = "";
+ 
+     /** 访问令牌过期时间（秒），默认 2 小时 */
+     private long accessTokenExpiration = 7200;
+diff --git a/common/common-security/src/main/java/com/eldercare/common/security/filter/JwtAuthenticationFilter.java b/common/common-security/src/main/java/com/eldercare/common/security/filter/JwtAuthenticationFilter.java
+index 1c27bd1..58a90ac 100644
+--- a/common/common-security/src/main/java/com/eldercare/common/security/filter/JwtAuthenticationFilter.java
++++ b/common/common-security/src/main/java/com/eldercare/common/security/filter/JwtAuthenticationFilter.java
+@@ -2,6 +2,7 @@ package com.eldercare.common.security.filter;
+ 
+ import com.eldercare.common.core.domain.R;
+ import com.eldercare.common.core.exception.SystemErrorCode;
++import com.eldercare.common.core.utils.TraceContext;
+ import com.eldercare.common.security.constant.SecurityConstants;
+ import com.eldercare.common.security.context.SecurityContextHolder;
+ import com.eldercare.common.security.domain.LoginUser;
+@@ -55,61 +56,72 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
+                                     FilterChain filterChain) throws ServletException, IOException {
+         String requestUri = request.getRequestURI();
+ 
+-        // 白名单路径直接放行
+-        if (isWhitelisted(requestUri)) {
+-            filterChain.doFilter(request, response);
+-            return;
++        // 从网关透传的 X-Trace-Id 头提取 traceId 并设置到 MDC，确保全链路可追踪
++        String traceId = request.getHeader("X-Trace-Id");
++        if (StringUtils.hasText(traceId)) {
++            TraceContext.setTraceId(traceId);
+         }
+ 
+-        // 1. 优先从 Header 提取网关透传的用户信息
+-        String userIdStr = request.getHeader(SecurityConstants.HEADER_USER_ID);
+-        String username = request.getHeader(SecurityConstants.HEADER_USERNAME);
+-        String rolesStr = request.getHeader(SecurityConstants.HEADER_USER_ROLES);
++        try {
++            // 白名单路径直接放行
++            if (isWhitelisted(requestUri)) {
++                filterChain.doFilter(request, response);
++                return;
++            }
+ 
+-        if (StringUtils.hasText(userIdStr)) {
+-            try {
+-                Long userId = Long.valueOf(userIdStr);
+-                Set<UserRole> roles = new HashSet<>();
+-                if (StringUtils.hasText(rolesStr)) {
+-                    for (String role : rolesStr.split(",")) {
+-                        try {
+-                            roles.add(UserRole.valueOf(role.trim()));
+-                        } catch (IllegalArgumentException e) {
+-                            log.warn("未知角色类型被丢弃: {}", role);
++            // 1. 优先从 Header 提取网关透传的用户信息
++            String userIdStr = request.getHeader(SecurityConstants.HEADER_USER_ID);
++            String username = request.getHeader(SecurityConstants.HEADER_USERNAME);
++            String rolesStr = request.getHeader(SecurityConstants.HEADER_USER_ROLES);
++
++            if (StringUtils.hasText(userIdStr)) {
++                try {
++                    Long userId = Long.valueOf(userIdStr);
++                    Set<UserRole> roles = new HashSet<>();
++                    if (StringUtils.hasText(rolesStr)) {
++                        for (String role : rolesStr.split(",")) {
++                            try {
++                                roles.add(UserRole.valueOf(role.trim()));
++                            } catch (IllegalArgumentException e) {
++                                log.warn("未知角色类型被丢弃: {}", role);
++                            }
+                         }
+                     }
++                    LoginUser loginUser = new LoginUser(userId, username, roles);
++                    SecurityContextHolder.setLoginUser(loginUser);
++                    log.debug("[SecurityFilter] 从网关透传请求头提取用户身份成功: userId={}", userId);
++                    filterChain.doFilter(request, response);
++                    return;
++                } catch (NumberFormatException e) {
++                    log.warn("[SecurityFilter] 提取网关用户ID格式错误: {}", userIdStr);
++                } finally {
++                    SecurityContextHolder.clear();
+                 }
+-                LoginUser loginUser = new LoginUser(userId, username, roles);
++            }
++
++            // 2. 回退模式：本地验证并解析 JWT
++            String token = extractToken(request);
++            if (!StringUtils.hasText(token)) {
++                writeErrorResponse(response);
++                return;
++            }
++
++            if (!jwtTokenProvider.validateToken(token)) {
++                writeErrorResponse(response);
++                return;
++            }
++
++            try {
++                LoginUser loginUser = jwtTokenProvider.getLoginUser(token);
+                 SecurityContextHolder.setLoginUser(loginUser);
+-                log.debug("[SecurityFilter] 从网关透传请求头提取用户身份成功: userId={}", userId);
++                log.debug("[SecurityFilter] 本地解密 JWT 身份成功: userId={}", loginUser.getUserId());
+                 filterChain.doFilter(request, response);
+-                return;
+-            } catch (NumberFormatException e) {
+-                log.warn("[SecurityFilter] 提取网关用户ID格式错误: {}", userIdStr);
+             } finally {
+                 SecurityContextHolder.clear();
+             }
+-        }
+-
+-        // 2. 回退模式：本地验证并解析 JWT
+-        String token = extractToken(request);
+-        if (!StringUtils.hasText(token)) {
+-            writeErrorResponse(response);
+-            return;
+-        }
+-
+-        if (!jwtTokenProvider.validateToken(token)) {
+-            writeErrorResponse(response);
+-            return;
+-        }
+-
+-        try {
+-            LoginUser loginUser = jwtTokenProvider.getLoginUser(token);
+-            SecurityContextHolder.setLoginUser(loginUser);
+-            log.debug("[SecurityFilter] 本地解密 JWT 身份成功: userId={}", loginUser.getUserId());
+-            filterChain.doFilter(request, response);
+         } finally {
+-            SecurityContextHolder.clear();
++            // 清理 traceId MDC，防止线程池复用导致串号
++            TraceContext.clear();
+         }
+     }
+ 
+diff --git a/common/common-security/src/main/java/com/eldercare/common/security/jwt/JwtTokenProvider.java b/common/common-security/src/main/java/com/eldercare/common/security/jwt/JwtTokenProvider.java
+index dac8873..5f0d73c 100644
+--- a/common/common-security/src/main/java/com/eldercare/common/security/jwt/JwtTokenProvider.java
++++ b/common/common-security/src/main/java/com/eldercare/common/security/jwt/JwtTokenProvider.java
+@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
+ import java.util.Arrays;
+ import java.util.Date;
+ import java.util.Set;
++import java.util.UUID;
+ import java.util.stream.Collectors;
+ 
+ /**
+@@ -31,11 +32,16 @@ public class JwtTokenProvider {
+     private final long refreshTokenExpiration;
+ 
+     /**
+-     * @param secret                  签名密钥（明文，实际使用时会转为 HMAC-SHA256 密钥）
++     * @param secret                  签名密钥（明文，实际使用时会转为 HMAC-SHA256 密钥，最小 32 字符）
+      * @param accessTokenExpiration   访问令牌过期时间（秒）
+      * @param refreshTokenExpiration  刷新令牌过期时间（秒）
++     * @throws IllegalStateException 密钥为空或长度不足 32 字符时抛出
+      */
+     public JwtTokenProvider(String secret, long accessTokenExpiration, long refreshTokenExpiration) {
++        if (secret == null || secret.length() < 32) {
++            throw new IllegalStateException(
++                    "JWT 密钥长度不足，最小 32 字符（HS256 要求）。请通过环境变量 ELDERCARE_JWT_SECRET 或配置 eldercare.security.secret 设置");
++        }
+         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
+         this.accessTokenExpiration = accessTokenExpiration;
+         this.refreshTokenExpiration = refreshTokenExpiration;
+@@ -178,6 +184,7 @@ public class JwtTokenProvider {
+                 : "";
+ 
+         return Jwts.builder()
++                .setId(UUID.randomUUID().toString().replace("-", ""))
+                 .setSubject(loginUser.getUsername())
+                 .claim(SecurityConstants.CLAIM_USER_ID, loginUser.getUserId())
+                 .claim(SecurityConstants.CLAIM_USERNAME, loginUser.getUsername())
+diff --git a/gateway/pom.xml b/gateway/pom.xml
+index a7c14f3..3d78c9f 100644
+--- a/gateway/pom.xml
++++ b/gateway/pom.xml
+@@ -62,6 +62,18 @@
+             <artifactId>sentinel-datasource-nacos</artifactId>
+         </dependency>
+ 
++        <!-- Reactive Redis（Token 黑名单检查，WebFlux 非阻塞） -->
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
++        </dependency>
++
++        <!-- Actuator（健康检查） -->
++        <dependency>
++            <groupId>org.springframework.boot</groupId>
++            <artifactId>spring-boot-starter-actuator</artifactId>
++        </dependency>
++
+         <!-- 测试依赖 -->
+         <dependency>
+             <groupId>org.springframework.boot</groupId>
+diff --git a/gateway/src/main/java/com/eldercare/gateway/config/SentinelGatewayConfig.java b/gateway/src/main/java/com/eldercare/gateway/config/SentinelGatewayConfig.java
+index f153358..64a415a 100644
+--- a/gateway/src/main/java/com/eldercare/gateway/config/SentinelGatewayConfig.java
++++ b/gateway/src/main/java/com/eldercare/gateway/config/SentinelGatewayConfig.java
+@@ -102,7 +102,7 @@ public class SentinelGatewayConfig {
+     public void initFlowRules() {
+         initCustomizedApis();
+         initGatewayFlowRules();
+-        log.info("Sentinel 网关流控规则（硬编码兜底）初始化完成: 8条HTTP路由, QPS上限=100");
++        log.info("Sentinel 网关流控规则（硬编码兖底）初始化完成: auth=20, alert=500, 其余=200 QPS");
+ 
+         try {
+             initNacosFlowDataSource();
+@@ -141,23 +141,42 @@ public class SentinelGatewayConfig {
+     }
+ 
+     /**
+-     * 定义网关流控规则 — 每条路由 QPS 上限 100
++     * 定义网关流控规则 — 三级分档（依据《微服务架构方案》3.1 节）
++     * <ul>
++     *   <li>route-auth: QPS=20（防暴力破解）</li>
++     *   <li>route-alert: QPS=500（P0 生命安全主链路）</li>
++     *   <li>其余 6 条路由: QPS=200（通用业务）</li>
++     * </ul>
+      */
+     private void initGatewayFlowRules() {
+         Set<GatewayFlowRule> rules = new HashSet<>();
+ 
+-        String[] apiNames = {"route-auth", "route-admin", "route-server", "route-elderly",
+-                "route-family", "route-vital", "route-ai", "route-alert"};
+-        for (String apiName : apiNames) {
+-            GatewayFlowRule rule = new GatewayFlowRule(apiName);
+-            rule.setCount(100);   // QPS 上限
+-            rule.setIntervalSec(1);
+-            rules.add(rule);
++        // 登录/注册 — 防暴力破解
++        rules.add(buildFlowRule("route-auth", 20));
++
++        // SOS/预警 — P0 生命安全主链路
++        rules.add(buildFlowRule("route-alert", 500));
++
++        // 通用业务路由
++        String[] generalApis = {"route-admin", "route-server", "route-elderly",
++                "route-family", "route-vital", "route-ai"};
++        for (String apiName : generalApis) {
++            rules.add(buildFlowRule(apiName, 200));
+         }
+ 
+         GatewayRuleManager.loadRules(rules);
+     }
+ 
++    /**
++     * 构建单条流控规则
++     */
++    private GatewayFlowRule buildFlowRule(String resourceName, double qps) {
++        GatewayFlowRule rule = new GatewayFlowRule(resourceName);
++        rule.setCount(qps);
++        rule.setIntervalSec(1);
++        return rule;
++    }
++
+     /**
+      * 注册 Nacos 动态网关流控规则数据源
+      * <p>
+diff --git a/gateway/src/main/java/com/eldercare/gateway/filter/JwtAuthGlobalFilter.java b/gateway/src/main/java/com/eldercare/gateway/filter/JwtAuthGlobalFilter.java
+index 1f69f5a..9de2bc5 100644
+--- a/gateway/src/main/java/com/eldercare/gateway/filter/JwtAuthGlobalFilter.java
++++ b/gateway/src/main/java/com/eldercare/gateway/filter/JwtAuthGlobalFilter.java
+@@ -2,7 +2,6 @@ package com.eldercare.gateway.filter;
+ 
+ import com.eldercare.common.core.domain.R;
+ import com.eldercare.common.core.exception.SystemErrorCode;
+-import com.eldercare.common.core.utils.IdUtil;
+ import com.eldercare.common.security.constant.SecurityConstants;
+ import com.eldercare.common.security.domain.LoginUser;
+ import com.eldercare.common.security.jwt.JwtTokenProvider;
+@@ -62,7 +61,6 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
+     private static final String HEADER_USER_ID = "X-User-Id";
+     private static final String HEADER_USERNAME = "X-Username";
+     private static final String HEADER_USER_ROLES = "X-User-Roles";
+-    private static final String HEADER_TRACE_ID = "X-Trace-Id";
+ 
+     public JwtAuthGlobalFilter(JwtTokenProvider jwtTokenProvider, ObjectMapper objectMapper) {
+         this.jwtTokenProvider = jwtTokenProvider;
+@@ -73,16 +71,9 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
+     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+         String path = exchange.getRequest().getURI().getPath();
+ 
+-        // 0. 提取或生成 traceId（最先执行，确保全链路可追踪）
+-        String traceId = exchange.getRequest().getHeaders().getFirst(HEADER_TRACE_ID);
+-        if (!StringUtils.hasText(traceId)) {
+-            traceId = IdUtil.uuid32();
+-        }
+-        exchange.getAttributes().put("traceId", traceId);
+-
+-        // 1. 白名单路径直接放行
++        // 1. 白名单路径直接放行（traceId 已由 TraceIdGlobalFilter 透传）
+         if (isWhitelisted(path)) {
+-            return chain.filter(withTraceIdHeader(exchange, traceId));
++            return chain.filter(exchange);
+         }
+ 
+         // 2. 提取 Token
+@@ -104,8 +95,9 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
+ 
+         // 5. 存储到 exchange attributes（供同网关内其他 filter 使用）
+         exchange.getAttributes().put("loginUser", loginUser);
++        exchange.getAttributes().put("rawToken", token);
+ 
+-        // 6. 透传用户信息 + traceId 给下游服务 — 先清除外部传入的 X-User-* / X-Trace-Id 头（防伪造），再设置真实值
++        // 6. 透传用户信息给下游服务 — 先清除外部传入的 X-User-* 头（防伪造），再设置真实值
+         String rolesStr = loginUser.getRoles() != null
+                 ? String.join(",", loginUser.getRoles().stream().map(Enum::name).toList())
+                 : "";
+@@ -115,12 +107,10 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
+                     headers.remove(HEADER_USER_ID);
+                     headers.remove(HEADER_USERNAME);
+                     headers.remove(HEADER_USER_ROLES);
+-                    headers.remove(HEADER_TRACE_ID);
+                 })
+                 .header(HEADER_USER_ID, String.valueOf(loginUser.getUserId()))
+                 .header(HEADER_USERNAME, loginUser.getUsername())
+                 .header(HEADER_USER_ROLES, rolesStr)
+-                .header(HEADER_TRACE_ID, traceId)
+                 .build();
+ 
+         return chain.filter(exchange.mutate().request(mutatedRequest).build());
+@@ -172,7 +162,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
+         response.setStatusCode(HttpStatus.UNAUTHORIZED);
+         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+ 
+-        // 显式设置 traceId（WebFlux 环境下 ThreadLocal MDC 不可用）
++        // 从 exchange attribute 获取 traceId（由 TraceIdGlobalFilter 设置）
+         String traceId = exchange.getAttribute("traceId");
+         R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED);
+         if (StringUtils.hasText(traceId)) {
+@@ -187,15 +177,4 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
+             return response.setComplete();
+         }
+     }
+-
+-    /**
+-     * 为白名单路径请求透传 traceId 头到下游
+-     */
+-    private ServerWebExchange withTraceIdHeader(ServerWebExchange exchange, String traceId) {
+-        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
+-                .headers(headers -> headers.remove(HEADER_TRACE_ID))
+-                .header(HEADER_TRACE_ID, traceId)
+-                .build();
+-        return exchange.mutate().request(mutatedRequest).build();
+-    }
+ }
+diff --git a/gateway/src/main/java/com/eldercare/gateway/handler/GlobalErrorWebExceptionHandler.java b/gateway/src/main/java/com/eldercare/gateway/handler/GlobalErrorWebExceptionHandler.java
+index a7a8283..8a85591 100644
+--- a/gateway/src/main/java/com/eldercare/gateway/handler/GlobalErrorWebExceptionHandler.java
++++ b/gateway/src/main/java/com/eldercare/gateway/handler/GlobalErrorWebExceptionHandler.java
+@@ -71,6 +71,12 @@ public class GlobalErrorWebExceptionHandler extends AbstractErrorWebExceptionHan
+ 
+         R<Void> result = R.fail(mapping.errorCode);
+ 
++        // 从 exchange attribute 获取 traceId（由 TraceIdGlobalFilter 设置）
++        Object traceId = request.exchange().getAttribute("traceId");
++        if (traceId instanceof String traceIdStr && !traceIdStr.isEmpty()) {
++            result.setTraceId(traceIdStr);
++        }
++
+         try {
+             byte[] bytes = objectMapper.writeValueAsBytes(result);
+             return ServerResponse.status(mapping.httpStatus)
+diff --git a/gateway/src/main/resources/application.yml b/gateway/src/main/resources/application.yml
+index b9dac36..0f1afea 100644
+--- a/gateway/src/main/resources/application.yml
++++ b/gateway/src/main/resources/application.yml
+@@ -1,9 +1,12 @@
+ server:
+   port: 9999
++  shutdown: graceful
+ 
+ spring:
+   application:
+     name: gateway
++  lifecycle:
++    timeout-per-shutdown-phase: 30s
+   cloud:
+     nacos:
+       discovery:
+@@ -86,14 +89,15 @@ spring:
+ eldercare:
+   security:
+     enabled: true
+-    secret: ElderCarePlatform2024SecretKey!@#$%^
++    secret: ${ELDERCARE_JWT_SECRET:ElderCarePlatform2024SecretKey!@#$%^}
+     access-token-expiration: 7200
+     refresh-token-expiration: 604800
+ 
+     # CORS 跨域配置
+     cors:
+       allowed-origin-patterns:
+-        - "*"  # 开发环境使用通配符，生产环境改为具体域名列表
++        - http://localhost:5173
++        - http://localhost:5174
+       max-age: 3600
+ 
+     # RBAC 角色-路径映射（用户需拥有所列角色之一方可访问匹配路径）
+@@ -129,14 +133,21 @@ eldercare:
+         roles:
+           - ADMIN
+           - FAMILY
+-      # /ws/alert/** 不在此配置 → 所有已认证用户均可访问
++      # 告警实时推送 WebSocket
++      - paths:
++          - /ws/alert/**
++        roles:
++          - ADMIN
++          - CAREGIVER
++          - OPERATOR
++          - FAMILY
+       # 生命体征 — 体征数据
+       - paths:
+           - /vital/**
+         roles:
+           - ADMIN
+           - CAREGIVER
+-          - OPERATOR
++          - DOCTOR
+       # AI 推理 — 智能服务
+       - paths:
+           - /ai/**
+@@ -155,4 +166,14 @@ eldercare:
+ logging:
+   level:
+     com.eldercare.gateway: DEBUG
+-    com.alibaba.csp.sentinel: INFO
+\ No newline at end of file
++    com.alibaba.csp.sentinel: INFO
++
++# ==================== Actuator ====================
++management:
++  endpoints:
++    web:
++      exposure:
++        include: health
++  endpoint:
++    health:
++      show-details: never
+\ No newline at end of file

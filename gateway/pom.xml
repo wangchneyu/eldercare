@@ -40,6 +40,12 @@
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
 
+        <!-- Nacos Config（RBAC/白名单动态刷新） -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+
         <!-- 复用 common-security 的 JwtTokenProvider + SecurityConstants -->
         <dependency>
             <groupId>com.eldercare</groupId>
@@ -60,6 +66,18 @@
         <dependency>
             <groupId>com.alibaba.csp</groupId>
             <artifactId>sentinel-datasource-nacos</artifactId>
+        </dependency>
+
+        <!-- Reactive Redis（Token 黑名单检查，WebFlux 非阻塞） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis-reactive</artifactId>
+        </dependency>
+
+        <!-- Actuator（健康检查） -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <!-- 测试依赖 -->

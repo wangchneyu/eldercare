@@ -8,3 +8,9 @@ spring:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+
+# ==================== 安全配置 ====================
+eldercare:
+  security:
+    enabled: true
+    secret: ${ELDERCARE_JWT_SECRET:ElderCarePlatform2024SecretKey!@#$%^}

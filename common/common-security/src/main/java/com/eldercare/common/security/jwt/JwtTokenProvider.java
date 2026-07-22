@@ -16,6 +16,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
@@ -31,11 +32,16 @@ public class JwtTokenProvider {
     private final long refreshTokenExpiration;
 
     /**
-     * @param secret                  签名密钥（明文，实际使用时会转为 HMAC-SHA256 密钥）
+     * @param secret                  签名密钥（明文，实际使用时会转为 HMAC-SHA256 密钥，最小 32 字符）
      * @param accessTokenExpiration   访问令牌过期时间（秒）
      * @param refreshTokenExpiration  刷新令牌过期时间（秒）
+     * @throws IllegalStateException 密钥为空或长度不足 32 字符时抛出
      */
     public JwtTokenProvider(String secret, long accessTokenExpiration, long refreshTokenExpiration) {
+        if (secret == null || secret.length() < 32) {
+            throw new IllegalStateException(
+                    "JWT 密钥长度不足，最小 32 字符（HS256 要求）。请通过环境变量 ELDERCARE_JWT_SECRET 或配置 eldercare.security.secret 设置");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
@@ -178,6 +184,7 @@ public class JwtTokenProvider {
                 : "";
 
         return Jwts.builder()
+                .setId(UUID.randomUUID().toString().replace("-", ""))
                 .setSubject(loginUser.getUsername())
                 .claim(SecurityConstants.CLAIM_USER_ID, loginUser.getUserId())
                 .claim(SecurityConstants.CLAIM_USERNAME, loginUser.getUsername())

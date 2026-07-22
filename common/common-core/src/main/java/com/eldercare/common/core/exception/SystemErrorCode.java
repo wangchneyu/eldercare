@@ -15,12 +15,11 @@ public enum SystemErrorCode implements IErrorCode {
     TOO_MANY_REQUESTS(100005, "请求过于频繁，请稍后再试", HttpStatus.TOO_MANY_REQUESTS),
     SERVICE_UNAVAILABLE(100006, "服务暂不可用，请稍后再试", HttpStatus.SERVICE_UNAVAILABLE),
     REMOTE_CALL_FAILED(100007, "依赖服务暂不可用，请稍后再试", HttpStatus.BAD_GATEWAY),
-    NOT_FOUND(100008, "请求资源不存在", HttpStatus.NOT_FOUND),
+    NOT_FOUND(100009, "请求资源不存在", HttpStatus.NOT_FOUND),
 
     // ==================== 认证与授权号段 110000–119999 ====================
     UNAUTHORIZED(110001, "登录状态已失效，请重新登录", HttpStatus.UNAUTHORIZED),
-    FORBIDDEN(110002, "无权执行此操作", HttpStatus.FORBIDDEN),
-    CONFLICT(100010, "数据已存在或冲突", HttpStatus.CONFLICT);
+    FORBIDDEN(110002, "无权执行此操作", HttpStatus.FORBIDDEN);
 
     private final int code;
     private final String msg;

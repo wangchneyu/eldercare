@@ -86,7 +86,9 @@ public class GlobalExceptionHandlerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(emptyBody))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value(SystemErrorCode.VALIDATION_ERROR.getCode()));
+                .andExpect(jsonPath("$.code").value(SystemErrorCode.BAD_REQUEST.getCode()))
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].field").value("name"));
     }
 
     @Test

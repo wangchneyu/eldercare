@@ -71,6 +71,12 @@ public class GlobalErrorWebExceptionHandler extends AbstractErrorWebExceptionHan
 
         R<Void> result = R.fail(mapping.errorCode);
 
+        // 从 exchange attribute 获取 traceId（由 TraceIdGlobalFilter 设置）
+        Object traceId = request.exchange().getAttribute("traceId");
+        if (traceId instanceof String traceIdStr && !traceIdStr.isEmpty()) {
+            result.setTraceId(traceIdStr);
+        }
+
         try {
             byte[] bytes = objectMapper.writeValueAsBytes(result);
             return ServerResponse.status(mapping.httpStatus)

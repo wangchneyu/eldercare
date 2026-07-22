@@ -51,6 +51,20 @@
             <artifactId>slf4j-api</artifactId>
         </dependency>
 
+        <!-- Spring Security Core（AccessDeniedException 处理，optional 不传递给下游） -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- RocketMQ（MQ 基础设施，optional 不传递给下游） -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>

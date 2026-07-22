@@ -36,9 +36,9 @@ public class SecurityProperties {
 
     /**
      * JWT 签名密钥
-     * <p>HS256 要求密钥长度至少 256 bits（32 字符），生产环境请使用足够强度的密钥
+     * <p>HS256 要求密钥长度至少 256 bits（32 字符），生产环境必须通过环境变量 ELDERCARE_JWT_SECRET 注入
      */
-    private String secret = "ElderCarePlatform2024SecretKey!@#$%^";
+    private String secret = "";
 
     /** 访问令牌过期时间（秒），默认 2 小时 */
     private long accessTokenExpiration = 7200;

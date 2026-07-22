@@ -1,17 +1,28 @@
 server:
   port: 9999
+  shutdown: graceful
 
 spring:
   application:
     name: gateway
+  config:
+    import: optional:nacos:service-gateway.yaml
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   cloud:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+      config:
+        server-addr: 127.0.0.1:8848
+        file-extension: yaml
     gateway:
       discovery:
         locator:
           enabled: false
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 10s
       routes:
         # ==================== HTTP 路由 (8 组) ====================
 
@@ -86,14 +97,15 @@ spring:
 eldercare:
   security:
     enabled: true
-    secret: ElderCarePlatform2024SecretKey!@#$%^
+    secret: ${ELDERCARE_JWT_SECRET:ElderCarePlatform2024SecretKey!@#$%^}
     access-token-expiration: 7200
     refresh-token-expiration: 604800
 
     # CORS 跨域配置
     cors:
       allowed-origin-patterns:
-        - "*"  # 开发环境使用通配符，生产环境改为具体域名列表
+        - http://localhost:5173
+        - http://localhost:5174
       max-age: 3600
 
     # RBAC 角色-路径映射（用户需拥有所列角色之一方可访问匹配路径）
@@ -129,14 +141,21 @@ eldercare:
         roles:
           - ADMIN
           - FAMILY
-      # /ws/alert/** 不在此配置 → 所有已认证用户均可访问
+      # 告警实时推送 WebSocket
+      - paths:
+          - /ws/alert/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+          - OPERATOR
+          - FAMILY
       # 生命体征 — 体征数据
       - paths:
           - /vital/**
         roles:
           - ADMIN
           - CAREGIVER
-          - OPERATOR
+          - DOCTOR
       # AI 推理 — 智能服务
       - paths:
           - /ai/**
@@ -156,3 +175,13 @@ logging:
   level:
     com.eldercare.gateway: DEBUG
     com.alibaba.csp.sentinel: INFO
+
+# ==================== Actuator ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

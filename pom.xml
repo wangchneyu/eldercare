@@ -34,6 +34,8 @@
         <lombok.version>1.18.30</lombok.version>
         <redisson.version>3.27.0</redisson.version>
         <springdoc.version>2.5.0</springdoc.version>
+        <rocketmq-spring.version>2.3.0</rocketmq-spring.version>
+        <rocketmq-client.version>5.3.1</rocketmq-client.version>
     </properties>
 
     <dependencyManagement>
@@ -72,6 +74,19 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
+            </dependency>
+
+            <!-- RocketMQ -->
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-spring-boot-starter</artifactId>
+                <version>${rocketmq-spring.version}</version>
+            </dependency>
+            <!-- 显式指定 RocketMQ Client 版本，覆盖 starter 传递的旧版客户端 -->
+            <dependency>
+                <groupId>org.apache.rocketmq</groupId>
+                <artifactId>rocketmq-client</artifactId>
+                <version>${rocketmq-client.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

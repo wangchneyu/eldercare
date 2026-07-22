@@ -48,7 +48,7 @@ class CorsWebFilterTest {
     @Autowired
     private JwtTokenProvider jwtTokenProvider;
 
-    private static final String TEST_ORIGIN = "http://example.com";
+    private static final String TEST_ORIGIN = "http://localhost:5173";
 
     @BeforeEach
     void setUp() {

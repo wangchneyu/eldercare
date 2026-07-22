@@ -2,6 +2,7 @@ package com.eldercare.common.security.filter;
 
 import com.eldercare.common.core.domain.R;
 import com.eldercare.common.core.exception.SystemErrorCode;
+import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.common.security.constant.SecurityConstants;
 import com.eldercare.common.security.context.SecurityContextHolder;
 import com.eldercare.common.security.domain.LoginUser;
@@ -55,61 +56,72 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         String requestUri = request.getRequestURI();
 
-        // 白名单路径直接放行
-        if (isWhitelisted(requestUri)) {
-            filterChain.doFilter(request, response);
-            return;
-        }
-
-        // 1. 优先从 Header 提取网关透传的用户信息
-        String userIdStr = request.getHeader(SecurityConstants.HEADER_USER_ID);
-        String username = request.getHeader(SecurityConstants.HEADER_USERNAME);
-        String rolesStr = request.getHeader(SecurityConstants.HEADER_USER_ROLES);
-
-        if (StringUtils.hasText(userIdStr)) {
-            try {
-                Long userId = Long.valueOf(userIdStr);
-                Set<UserRole> roles = new HashSet<>();
-                if (StringUtils.hasText(rolesStr)) {
-                    for (String role : rolesStr.split(",")) {
-                        try {
-                            roles.add(UserRole.valueOf(role.trim()));
-                        } catch (IllegalArgumentException e) {
-                            log.warn("未知角色类型被丢弃: {}", role);
-                        }
-                    }
-                }
-                LoginUser loginUser = new LoginUser(userId, username, roles);
-                SecurityContextHolder.setLoginUser(loginUser);
-                log.debug("[SecurityFilter] 从网关透传请求头提取用户身份成功: userId={}", userId);
-                filterChain.doFilter(request, response);
-                return;
-            } catch (NumberFormatException e) {
-                log.warn("[SecurityFilter] 提取网关用户ID格式错误: {}", userIdStr);
-            } finally {
-                SecurityContextHolder.clear();
-            }
-        }
-
-        // 2. 回退模式：本地验证并解析 JWT
-        String token = extractToken(request);
-        if (!StringUtils.hasText(token)) {
-            writeErrorResponse(response);
-            return;
-        }
-
-        if (!jwtTokenProvider.validateToken(token)) {
-            writeErrorResponse(response);
-            return;
+        // 从网关透传的 X-Trace-Id 头提取 traceId 并设置到 MDC，确保全链路可追踪
+        String traceId = request.getHeader("X-Trace-Id");
+        if (StringUtils.hasText(traceId)) {
+            TraceContext.setTraceId(traceId);
         }
 
         try {
-            LoginUser loginUser = jwtTokenProvider.getLoginUser(token);
-            SecurityContextHolder.setLoginUser(loginUser);
-            log.debug("[SecurityFilter] 本地解密 JWT 身份成功: userId={}", loginUser.getUserId());
-            filterChain.doFilter(request, response);
+            // 白名单路径直接放行
+            if (isWhitelisted(requestUri)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
+
+            // 1. 优先从 Header 提取网关透传的用户信息
+            String userIdStr = request.getHeader(SecurityConstants.HEADER_USER_ID);
+            String username = request.getHeader(SecurityConstants.HEADER_USERNAME);
+            String rolesStr = request.getHeader(SecurityConstants.HEADER_USER_ROLES);
+
+            if (StringUtils.hasText(userIdStr)) {
+                try {
+                    Long userId = Long.valueOf(userIdStr);
+                    Set<UserRole> roles = new HashSet<>();
+                    if (StringUtils.hasText(rolesStr)) {
+                        for (String role : rolesStr.split(",")) {
+                            try {
+                                roles.add(UserRole.valueOf(role.trim()));
+                            } catch (IllegalArgumentException e) {
+                                log.warn("未知角色类型被丢弃: {}", role);
+                            }
+                        }
+                    }
+                    LoginUser loginUser = new LoginUser(userId, username, roles);
+                    SecurityContextHolder.setLoginUser(loginUser);
+                    log.debug("[SecurityFilter] 从网关透传请求头提取用户身份成功: userId={}", userId);
+                    filterChain.doFilter(request, response);
+                    return;
+                } catch (NumberFormatException e) {
+                    log.warn("[SecurityFilter] 提取网关用户ID格式错误: {}", userIdStr);
+                } finally {
+                    SecurityContextHolder.clear();
+                }
+            }
+
+            // 2. 回退模式：本地验证并解析 JWT
+            String token = extractToken(request);
+            if (!StringUtils.hasText(token)) {
+                writeErrorResponse(response);
+                return;
+            }
+
+            if (!jwtTokenProvider.validateToken(token)) {
+                writeErrorResponse(response);
+                return;
+            }
+
+            try {
+                LoginUser loginUser = jwtTokenProvider.getLoginUser(token);
+                SecurityContextHolder.setLoginUser(loginUser);
+                log.debug("[SecurityFilter] 本地解密 JWT 身份成功: userId={}", loginUser.getUserId());
+                filterChain.doFilter(request, response);
+            } finally {
+                SecurityContextHolder.clear();
+            }
         } finally {
-            SecurityContextHolder.clear();
+            // 清理 traceId MDC，防止线程池复用导致串号
+            TraceContext.clear();
         }
     }
 

@@ -2,7 +2,7 @@ package com.eldercare.gateway.filter;
 
 import com.eldercare.common.core.domain.R;
 import com.eldercare.common.core.exception.SystemErrorCode;
-import com.eldercare.common.core.utils.IdUtil;
+import com.eldercare.common.security.config.SecurityProperties;
 import com.eldercare.common.security.constant.SecurityConstants;
 import com.eldercare.common.security.domain.LoginUser;
 import com.eldercare.common.security.jwt.JwtTokenProvider;
@@ -25,7 +25,6 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -49,40 +48,28 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final ObjectMapper objectMapper;
+    private final SecurityProperties securityProperties;
     private final AntPathMatcher pathMatcher = new AntPathMatcher();
-
-    /** 白名单路径（不需要 Token 即可访问） */
-    private static final List<String> WHITELIST = new ArrayList<>();
-
-    static {
-        WHITELIST.addAll(List.of(SecurityConstants.DEFAULT_WHITELIST));
-    }
 
     /** 透传给下游的用户信息头名称 */
     private static final String HEADER_USER_ID = "X-User-Id";
     private static final String HEADER_USERNAME = "X-Username";
     private static final String HEADER_USER_ROLES = "X-User-Roles";
-    private static final String HEADER_TRACE_ID = "X-Trace-Id";
 
-    public JwtAuthGlobalFilter(JwtTokenProvider jwtTokenProvider, ObjectMapper objectMapper) {
+    public JwtAuthGlobalFilter(JwtTokenProvider jwtTokenProvider, ObjectMapper objectMapper,
+                               SecurityProperties securityProperties) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.objectMapper = objectMapper;
+        this.securityProperties = securityProperties;
     }
 
     @Override
     public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
         String path = exchange.getRequest().getURI().getPath();
 
-        // 0. 提取或生成 traceId（最先执行，确保全链路可追踪）
-        String traceId = exchange.getRequest().getHeaders().getFirst(HEADER_TRACE_ID);
-        if (!StringUtils.hasText(traceId)) {
-            traceId = IdUtil.uuid32();
-        }
-        exchange.getAttributes().put("traceId", traceId);
-
-        // 1. 白名单路径直接放行
+        // 1. 白名单路径直接放行（traceId 已由 TraceIdGlobalFilter 透传）
         if (isWhitelisted(path)) {
-            return chain.filter(withTraceIdHeader(exchange, traceId));
+            return chain.filter(exchange);
         }
 
         // 2. 提取 Token
@@ -104,8 +91,9 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
 
         // 5. 存储到 exchange attributes（供同网关内其他 filter 使用）
         exchange.getAttributes().put("loginUser", loginUser);
+        exchange.getAttributes().put("rawToken", token);
 
-        // 6. 透传用户信息 + traceId 给下游服务 — 先清除外部传入的 X-User-* / X-Trace-Id 头（防伪造），再设置真实值
+        // 6. 透传用户信息给下游服务 — 先清除外部传入的 X-User-* 头（防伪造），再设置真实值
         String rolesStr = loginUser.getRoles() != null
                 ? String.join(",", loginUser.getRoles().stream().map(Enum::name).toList())
                 : "";
@@ -115,12 +103,10 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
                     headers.remove(HEADER_USER_ID);
                     headers.remove(HEADER_USERNAME);
                     headers.remove(HEADER_USER_ROLES);
-                    headers.remove(HEADER_TRACE_ID);
                 })
                 .header(HEADER_USER_ID, String.valueOf(loginUser.getUserId()))
                 .header(HEADER_USERNAME, loginUser.getUsername())
                 .header(HEADER_USER_ROLES, rolesStr)
-                .header(HEADER_TRACE_ID, traceId)
                 .build();
 
         return chain.filter(exchange.mutate().request(mutatedRequest).build());
@@ -156,10 +142,14 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
     }
 
     /**
-     * 判断请求路径是否在白名单中（支持 Ant 风格路径匹配）
+     * 判断请求路径是否在白名单中（支持 Ant 风格路径匹配，从 SecurityProperties 动态读取）
      */
     private boolean isWhitelisted(String path) {
-        return WHITELIST.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+        List<String> whitelist = securityProperties.getWhitelist();
+        if (whitelist == null || whitelist.isEmpty()) {
+            return false;
+        }
+        return whitelist.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
     }
 
     /**
@@ -172,7 +162,7 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
         response.setStatusCode(HttpStatus.UNAUTHORIZED);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
-        // 显式设置 traceId（WebFlux 环境下 ThreadLocal MDC 不可用）
+        // 从 exchange attribute 获取 traceId（由 TraceIdGlobalFilter 设置）
         String traceId = exchange.getAttribute("traceId");
         R<Void> result = R.fail(SystemErrorCode.UNAUTHORIZED);
         if (StringUtils.hasText(traceId)) {
@@ -186,16 +176,5 @@ public class JwtAuthGlobalFilter implements GlobalFilter, Ordered {
             log.error("序列化 401 响应失败", e);
             return response.setComplete();
         }
-    }
-
-    /**
-     * 为白名单路径请求透传 traceId 头到下游
-     */
-    private ServerWebExchange withTraceIdHeader(ServerWebExchange exchange, String traceId) {
-        ServerHttpRequest mutatedRequest = exchange.getRequest().mutate()
-                .headers(headers -> headers.remove(HEADER_TRACE_ID))
-                .header(HEADER_TRACE_ID, traceId)
-                .build();
-        return exchange.mutate().request(mutatedRequest).build();
     }
 }
