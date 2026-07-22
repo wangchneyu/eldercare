@@ -26,9 +26,9 @@ spring:
       routes:
         # ==================== HTTP 路由 (8 组) ====================
 
-        # 鉴权服务 — 登录/注册/刷新 Token
+        # 鉴权服务 — 登录/注册/刷新 Token（由 operation-service 承载）
         - id: route-auth
-          uri: lb://service-auth
+          uri: lb://service-operation
           predicates:
             - Path=/auth/**
 
