@@ -7,7 +7,6 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 
@@ -22,7 +21,7 @@ import java.util.stream.Collectors;
 /**
  * JWT Token 提供者：签发、验签、刷新、提取用户信息
  * <p>
- * 使用 HMAC-SHA256 签名算法，基于 jjwt 0.11.5 API
+ * 使用 HMAC-SHA256 签名算法，基于 jjwt 0.12.6 API
  */
 @Slf4j
 public class JwtTokenProvider {
@@ -184,15 +183,15 @@ public class JwtTokenProvider {
                 : "";
 
         return Jwts.builder()
-                .setId(UUID.randomUUID().toString().replace("-", ""))
-                .setSubject(loginUser.getUsername())
+                .id(UUID.randomUUID().toString().replace("-", ""))
+                .subject(loginUser.getUsername())
                 .claim(SecurityConstants.CLAIM_USER_ID, loginUser.getUserId())
                 .claim(SecurityConstants.CLAIM_USERNAME, loginUser.getUsername())
                 .claim(SecurityConstants.CLAIM_ROLES, rolesStr)
                 .claim(SecurityConstants.CLAIM_TOKEN_TYPE, tokenType)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(secretKey)
                 .compact();
     }
 
@@ -200,11 +199,11 @@ public class JwtTokenProvider {
      * 解析 Token Claims
      */
     private Claims parseClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(secretKey)
+        return Jwts.parser()
+                .verifyWith(secretKey)
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     /**

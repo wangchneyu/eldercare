@@ -29,12 +29,15 @@
         <spring-cloud.version>2023.0.1</spring-cloud.version>
         <spring-cloud-alibaba.version>2023.0.1.0</spring-cloud-alibaba.version>
 
-        <mybatis-plus.version>3.5.5</mybatis-plus.version>
+        <mybatis-plus.version>3.5.7</mybatis-plus.version>
         <lombok.version>1.18.30</lombok.version>
         <redisson.version>3.27.0</redisson.version>
         <springdoc.version>2.5.0</springdoc.version>
-        <rocketmq-spring.version>2.3.0</rocketmq-spring.version>
-        <rocketmq-client.version>5.3.1</rocketmq-client.version>
+        <rocketmq-spring.version>2.2.3</rocketmq-spring.version>
+        <postgresql.version>42.6.2</postgresql.version>
+        <jjwt.version>0.12.6</jjwt.version>
+        <hutool.version>5.8.34</hutool.version>
+        <cos-api.version>5.6.213</cos-api.version>
     </properties>
 
     <dependencyManagement>
@@ -81,11 +84,49 @@
                 <artifactId>rocketmq-spring-boot-starter</artifactId>
                 <version>${rocketmq-spring.version}</version>
             </dependency>
-            <!-- 显式指定 RocketMQ Client 版本，覆盖 starter 传递的旧版客户端 -->
+            <!-- MyBatis-Plus（boot3 专用） -->
             <dependency>
-                <groupId>org.apache.rocketmq</groupId>
-                <artifactId>rocketmq-client</artifactId>
-                <version>${rocketmq-client.version}</version>
+                <groupId>com.baomidou</groupId>
+                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+                <version>${mybatis-plus.version}</version>
+            </dependency>
+    
+            <!-- PostgreSQL JDBC -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>${postgresql.version}</version>
+            </dependency>
+    
+            <!-- JWT -->
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-api</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-impl</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.jsonwebtoken</groupId>
+                <artifactId>jjwt-jackson</artifactId>
+                <version>${jjwt.version}</version>
+            </dependency>
+    
+            <!-- Hutool 工具包 -->
+            <dependency>
+                <groupId>cn.hutool</groupId>
+                <artifactId>hutool-all</artifactId>
+                <version>${hutool.version}</version>
+            </dependency>
+
+            <!-- 腾讯云 COS SDK -->
+            <dependency>
+                <groupId>com.qcloud</groupId>
+                <artifactId>cos_api</artifactId>
+                <version>${cos-api.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
