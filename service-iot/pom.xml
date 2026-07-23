@@ -11,17 +11,50 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>service-iot</artifactId>
+    <description>物联网接入服务 — MQTT 设备接入、协议解析、消息分发</description>
+
+    <properties>
+        <mybatis-plus-boot3.version>3.5.7</mybatis-plus-boot3.version>
+        <rocketmq-starter.version>2.2.3</rocketmq-starter.version>
+        <disruptor.version>4.0.0</disruptor.version>
+        <paho-mqtt.version>1.2.5</paho-mqtt.version>
+    </properties>
 
     <dependencies>
+        <!-- ==================== 项目内模块 ==================== -->
         <dependency>
             <groupId>com.eldercare</groupId>
             <artifactId>common-core</artifactId>
             <version>${project.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-starter-web</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <dependency>
+            <groupId>com.eldercare</groupId>
+            <artifactId>common-security</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.eldercare</groupId>
+            <artifactId>common-feign</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!-- ==================== Spring Boot / Cloud ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
         <dependency>
@@ -30,9 +63,54 @@
         </dependency>
 
         <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+
+        <!-- ==================== 数据层 ==================== -->
+        <dependency>
+            <groupId>com.baomidou</groupId>
+            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+            <version>${mybatis-plus-boot3.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <!-- ==================== 消息队列 ==================== -->
+        <dependency>
+            <groupId>org.apache.rocketmq</groupId>
+            <artifactId>rocketmq-spring-boot-starter</artifactId>
+            <version>${rocketmq-starter.version}</version>
+        </dependency>
+
+        <!-- ==================== MQTT ==================== -->
+        <dependency>
             <groupId>org.eclipse.paho</groupId>
             <artifactId>org.eclipse.paho.client.mqttv3</artifactId>
-            <version>1.2.5</version>
+            <version>${paho-mqtt.version}</version>
+        </dependency>
+
+        <!-- ==================== 高性能管线 ==================== -->
+        <dependency>
+            <groupId>com.lmax</groupId>
+            <artifactId>disruptor</artifactId>
+            <version>${disruptor.version}</version>
+        </dependency>
+
+        <!-- ==================== 测试 ==================== -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 

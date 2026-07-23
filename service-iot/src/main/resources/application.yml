@@ -1,14 +1,50 @@
 server:
-  port: 8094
+  port: 8083
 
 spring:
   application:
     name: service-iot
+  profiles:
+    active: dev
   cloud:
     nacos:
       discovery:
-        server-addr: 127.0.0.1:8848
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: DEFAULT_GROUP
+        file-extension: yml
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+    default-property-inclusion: non_null
 
+# MyBatis-Plus
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+# Actuator
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+# MQTT（通用配置，dev 环境覆盖）
 mqtt:
   broker-url: tcp://localhost:1883
   client-id: iot-service
@@ -16,3 +52,19 @@ mqtt:
     - elder/+/+/+/up/+
   qos:
     - 1
+
+# RocketMQ（通用配置，dev 环境覆盖）
+rocketmq:
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
+  producer:
+    group: iot-service-producer
+    send-message-timeout: 3000
+    retry-times-when-send-failed: 3
+    retry-times-when-send-async-failed: 3
+
+# 日志
+logging:
+  level:
+    com.eldercare.iot: DEBUG
+    org.apache.rocketmq: WARN
+    org.eclipse.paho: INFO
