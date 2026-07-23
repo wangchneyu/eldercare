@@ -6,6 +6,8 @@ spring:
     name: service-iot
   profiles:
     active: dev
+  config:
+    import: "optional:nacos:service-iot.yml"
   cloud:
     nacos:
       discovery:

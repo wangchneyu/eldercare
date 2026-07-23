@@ -26,19 +26,16 @@
             <groupId>com.eldercare</groupId>
             <artifactId>common-core</artifactId>
             <version>${project.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.springframework.boot</groupId>
-                    <artifactId>spring-boot-starter-web</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
 
+        <!-- common-security 暂不引入（依赖 Servlet Filter，阶段一不需要认证） -->
+        <!--
         <dependency>
             <groupId>com.eldercare</groupId>
             <artifactId>common-security</artifactId>
             <version>${project.version}</version>
         </dependency>
+        -->
 
         <dependency>
             <groupId>com.eldercare</groupId>
@@ -47,9 +44,10 @@
         </dependency>
 
         <!-- ==================== Spring Boot / Cloud ==================== -->
+        <!-- 阶段一使用 Servlet 栈（common-core GlobalExceptionHandler 依赖 Servlet API），后续迁移 WebFlux -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-webflux</artifactId>
+            <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
         <dependency>
