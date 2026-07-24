@@ -21,7 +21,10 @@ public enum IotErrorCode implements IErrorCode {
     DEVICE_NOT_BOUND(212007, "设备当前未绑定", HttpStatus.NOT_FOUND),
     DEVICE_BINDING_INVALID(212008, "设备绑定信息不合法", HttpStatus.BAD_REQUEST),
     DEVICE_MESSAGE_CONFLICT(212009, "设备消息重复或冲突", HttpStatus.CONFLICT),
-    DEVICE_MESSAGE_UNDELIVERABLE(212010, "设备消息暂时无法投递", HttpStatus.SERVICE_UNAVAILABLE);
+    DEVICE_MESSAGE_UNDELIVERABLE(212010, "设备消息暂时无法投递", HttpStatus.SERVICE_UNAVAILABLE),
+    DEVICE_MODEL_NOT_FOUND(212011, "设备型号不存在", HttpStatus.NOT_FOUND),
+    DEVICE_MODEL_CODE_DUPLICATE(212012, "设备型号编码已存在", HttpStatus.CONFLICT),
+    DEVICE_MODEL_IN_USE(212013, "设备型号下存在设备实例，无法删除", HttpStatus.CONFLICT);
 
     private final int code;
     private final String msg;

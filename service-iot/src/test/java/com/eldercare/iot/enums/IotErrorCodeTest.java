@@ -14,8 +14,8 @@ class IotErrorCodeTest {
     @Test
     void all_error_codes_in_range() {
         for (IotErrorCode code : IotErrorCode.values()) {
-            assertTrue(code.getCode() >= 212001 && code.getCode() <= 212010,
-                    "错误码 " + code.name() + " 不在 212001-212010 范围内");
+            assertTrue(code.getCode() >= 212001 && code.getCode() <= 212999,
+                    "错误码 " + code.name() + " 不在 212000-212999 号段内");
         }
     }
 
@@ -44,8 +44,8 @@ class IotErrorCodeTest {
     }
 
     @Test
-    void total_count_is_10() {
-        assertEquals(10, IotErrorCode.values().length, "应该有 10 个错误码（212001-212010）");
+    void total_count_is_13() {
+        assertEquals(13, IotErrorCode.values().length, "应该有 13 个错误码（212001-212013）");
     }
 
     @Test
