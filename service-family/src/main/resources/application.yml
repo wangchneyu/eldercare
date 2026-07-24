@@ -1,10 +1,15 @@
 server:
-  port: 8092 # ?? ???????????????????
+  port: 8092
 
 spring:
   application:
     name: service-family
+  config:
+    import: optional:nacos:service-family.yaml
   cloud:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+      config:
+        server-addr: 127.0.0.1:8848
+        file-extension: yaml
