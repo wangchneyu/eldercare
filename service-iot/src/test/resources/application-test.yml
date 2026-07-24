@@ -4,6 +4,12 @@ spring:
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
 
 mybatis-plus:
   configuration:
@@ -15,3 +21,4 @@ mybatis-plus:
 mqtt:
   broker-url: tcp://localhost:1883
   client-id: iot-service-test
+  auto-connect: false

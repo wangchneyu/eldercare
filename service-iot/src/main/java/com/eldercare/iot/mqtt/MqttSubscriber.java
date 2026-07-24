@@ -1,77 +1,106 @@
 package com.eldercare.iot.mqtt;
 
+import com.eldercare.common.core.utils.IdUtil;
+import com.eldercare.common.core.utils.TraceContext;
+import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.eclipse.paho.client.mqttv3.*;
-import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.springframework.stereotype.Component;
 
+import java.time.OffsetDateTime;
+import java.util.Optional;
+
+/**
+ * MQTT 消息订阅器 — Phase 4 管线：
+ * TopicRouter → MessageValidator → 解析信封 → 生成 eventId → 日志输出
+ * <p>
+ * 全程无 I/O（无 DB 查询、无网络调用）。
+ * Phase 5 将在此处添加 Disruptor RingBuffer 投递。
+ */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class MqttSubscriber {
 
-    private final MqttConfig config;
-    private MqttClient client;
+    private final MqttConnectionManager connectionManager;
+    private final TopicRouter topicRouter;
+    private final MessageValidator messageValidator;
+
+    public MqttSubscriber(MqttConnectionManager connectionManager,
+                          TopicRouter topicRouter,
+                          MessageValidator messageValidator) {
+        this.connectionManager = connectionManager;
+        this.topicRouter = topicRouter;
+        this.messageValidator = messageValidator;
+    }
 
     @PostConstruct
-    public void connect() {
-        try {
-            client = new MqttClient(config.getBrokerUrl(), config.getClientId(), new MemoryPersistence());
-
-            MqttConnectOptions options = new MqttConnectOptions();
-            options.setAutomaticReconnect(true);
-            options.setCleanSession(true);
-            options.setConnectionTimeout(10);
-            options.setKeepAliveInterval(30);
-            if (config.getUsername() != null && !config.getUsername().isBlank()) {
-                options.setUserName(config.getUsername());
-                options.setPassword(config.getPassword().toCharArray());
-            }
-
-            client.setCallback(new MqttCallback() {
-                @Override
-                public void connectionLost(Throwable cause) {
-                    log.warn("MQTT 连接断开: {}", cause.getMessage());
-                }
-
-                @Override
-                public void messageArrived(String topic, MqttMessage message) {
-                    log.info("收到消息 -> topic: {}, payload: {}", topic, new String(message.getPayload()));
-                }
-
-                @Override
-                public void deliveryComplete(IMqttDeliveryToken token) {
-                }
-            });
-
-            client.connect(options);
-
-            int[] qos = config.getQos();
-            for (int i = 0; i < config.getTopics().length; i++) {
-                int q = (i < qos.length) ? qos[i] : 1;
-                client.subscribe(config.getTopics()[i], q);
-                log.info("已订阅 topic: {} (QoS: {})", config.getTopics()[i], q);
-            }
-
-            log.info("MQTT 连接成功 -> broker: {}", config.getBrokerUrl());
-        } catch (MqttException e) {
-            log.error("MQTT 连接失败: {}", e.getMessage(), e);
-        }
+    public void init() {
+        connectionManager.setMessageHandler(this::handleMessage);
+        connectionManager.connect();
     }
 
     @PreDestroy
-    public void disconnect() {
+    public void destroy() {
+        connectionManager.disconnect();
+    }
+
+    /**
+     * Paho 回调入口 — 不执行任何 I/O。
+     */
+    private void handleMessage(String topic, byte[] payload) {
+        String traceId = TraceContext.generateTraceId();
+        TraceContext.setTraceId(traceId);
         try {
-            if (client != null && client.isConnected()) {
-                client.disconnect();
-                client.close();
-                log.info("MQTT 已断开");
+            // ① Topic 路由
+            Optional<TopicRouter.RouteResult> routeOpt = topicRouter.route(topic);
+            if (routeOpt.isEmpty()) {
+                return; // TopicRouter 已 log.warn
             }
-        } catch (MqttException e) {
-            log.error("MQTT 断开异常: {}", e.getMessage());
+            TopicRouter.RouteResult route = routeOpt.get();
+            log.debug("Topic 解析: parkId={}, deviceType={}, deviceId={}, messageType={}",
+                    route.parkId(), route.deviceType(), route.deviceId(), route.messageType());
+
+            // ② 消息校验（无 I/O）
+            Optional<JsonNode> envelopeOpt = messageValidator.validate(payload);
+            if (envelopeOpt.isEmpty()) {
+                return; // MessageValidator 已 log.warn
+            }
+            JsonNode envelope = envelopeOpt.get();
+
+            // ③ 解析信封字段
+            String messageId = envelope.get("messageId").asText();
+            String deviceId = envelope.get("deviceId").asText();
+            String messageType = envelope.get("messageType").asText();
+            String protocolVersion = envelope.get("protocolVersion").asText();
+            String occurredAtStr = envelope.get("occurredAt").asText();
+
+            // ④ 生成 eventId（雪花 ID）
+            String eventId = String.valueOf(IdUtil.nextId());
+
+            // ⑤ 解析 occurredAt
+            OffsetDateTime occurredAt;
+            try {
+                occurredAt = OffsetDateTime.parse(occurredAtStr);
+            } catch (Exception e) {
+                log.warn("occurredAt 解析失败: {}", occurredAtStr);
+                occurredAt = OffsetDateTime.now();
+            }
+
+            log.info("消息处理完成: eventId={}, messageId={}, deviceId={}, messageType={}, " +
+                     "protocolVersion={}, traceId={}",
+                    eventId, messageId, deviceId, messageType, protocolVersion, traceId);
+
+            // Phase 5: 构建 RawDeviceMessage 并投递到 Disruptor RingBuffer
+            // var rawMessage = new RawDeviceMessage(
+            //     topic, envelope, route.parkId(), route.deviceType(),
+            //     route.deviceId(), route.messageType(), eventId, traceId, occurredAt);
+            // disruptorPublisher.publish(rawMessage);
+
+        } catch (Exception e) {
+            log.error("消息处理异常: topic={}, traceId={}", topic, traceId, e);
+        } finally {
+            TraceContext.clear();
         }
     }
 }

@@ -17,4 +17,5 @@ public class MqttConfig {
     private String password;
     private String[] topics = {"elder/+/+/+/up/+"};
     private int[] qos = {1};
+    private boolean autoConnect = true;
 }
