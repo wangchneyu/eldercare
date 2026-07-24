@@ -1,11 +1,14 @@
 package com.eldercare.iot.controller;
 
 import com.eldercare.common.core.domain.R;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.*;
 
 /**
@@ -31,8 +34,42 @@ public class InternalDiagnosticsController {
 
     private final JdbcTemplate jdbcTemplate;
 
+    @Value("${mqtt.broker-url:tcp://localhost:1883}")
+    private String mqttBrokerUrl;
+
     public InternalDiagnosticsController(JdbcTemplate jdbcTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+    }
+
+    /**
+     * 检查 EMQX 是否可达（通过 Dashboard HTTP API）。
+     * 浏览器无法直接请求 EMQX（CORS），由后端代理检测。
+     */
+    @GetMapping("/emqx-check")
+    public R<Map<String, Object>> emqxCheck() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        // 从 mqtt broker URL 推导 dashboard 地址：tcp://localhost:1883 → http://localhost:18083
+        String dashboardUrl = mqttBrokerUrl
+                .replace("tcp://", "http://")
+                .replace(":1883", ":18083");
+        String statusUrl = dashboardUrl + "/api/v5/status";
+
+        boolean reachable = false;
+        try {
+            HttpURLConnection conn = (HttpURLConnection) new URL(statusUrl).openConnection();
+            conn.setConnectTimeout(3000);
+            conn.setReadTimeout(3000);
+            conn.setRequestMethod("GET");
+            int code = conn.getResponseCode();
+            reachable = code >= 200 && code < 400;
+            conn.disconnect();
+        } catch (Exception ignored) {
+            // EMQX not reachable
+        }
+
+        result.put("reachable", reachable);
+        result.put("dashboardUrl", dashboardUrl);
+        return R.ok(result);
     }
 
     @GetMapping("/db-check")
