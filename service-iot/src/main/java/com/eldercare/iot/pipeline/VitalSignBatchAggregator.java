@@ -58,18 +58,15 @@ public class VitalSignBatchAggregator {
         try {
             buffer.add(event);
             reachedThreshold = buffer.size() >= MAX_BATCH_SIZE;
-            System.out.println("submit: bufferSize=" + buffer.size() + ", reachedThreshold=" + reachedThreshold);
         } finally {
             lock.unlock();
         }
         if (reachedThreshold) {
-            System.out.println("submit: reached threshold, iotMqExecutor=" + System.identityHashCode(iotMqExecutor));
             iotMqExecutor.execute(this::flush);
         }
     }
 
     private void flush() {
-        System.out.println("VitalSignBatchAggregator.flush() called, bufferSize=" + buffer.size());
         List<ParsedVitalSign> batch;
         lock.lock();
         try {

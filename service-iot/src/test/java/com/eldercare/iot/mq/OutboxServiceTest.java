@@ -4,6 +4,7 @@ import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.iot.entity.IotMqOutbox;
 import com.eldercare.iot.enums.OutboxStatus;
 import com.eldercare.iot.mapper.IotMqOutboxMapper;
+import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,7 +12,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.TransactionStatus;
@@ -25,7 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * OutboxService 单元测试：验证 C05 事务写入、SOS/FALL Tag、唯一约束去重与 traceId 保留。
+ * OutboxService 单元测试：验证 C05 事务写入、原始信封持久化、ON CONFLICT 去重、条件更新与 traceId 保留。
  */
 @ExtendWith(MockitoExtension.class)
 class OutboxServiceTest {
@@ -36,6 +36,8 @@ class OutboxServiceTest {
     SosEventProducer sosEventProducer;
     @Mock
     PlatformTransactionManager transactionManager;
+    @Mock
+    IotMetrics metrics;
 
     @InjectMocks
     OutboxService outboxService;
@@ -44,11 +46,11 @@ class OutboxServiceTest {
     void handleSosEvent_savesAndSends() {
         stubTransactionManager();
         ParsedSosEvent event = sosEvent("SOS_TRIGGERED");
-        when(outboxMapper.insert(any(IotMqOutbox.class))).thenReturn(1);
+        when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(1);
 
         outboxService.handleSosEvent(event);
 
-        verify(outboxMapper).insert(any(IotMqOutbox.class));
+        verify(outboxMapper).insertOnConflict(any(IotMqOutbox.class));
         verify(sosEventProducer).send(any(IotMqOutbox.class));
     }
 
@@ -56,25 +58,27 @@ class OutboxServiceTest {
     void duplicateEvent_isIgnoredAndNotSent() {
         stubTransactionManager();
         ParsedSosEvent event = sosEvent("SOS_TRIGGERED");
-        doThrow(DataIntegrityViolationException.class).when(outboxMapper).insert(any(IotMqOutbox.class));
+        when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(0);
 
         outboxService.handleSosEvent(event);
 
         verify(sosEventProducer, never()).send(any());
+        verify(metrics).outboxDuplicate("SOS_TRIGGERED");
     }
 
     @Test
     void fallEvent_usesFallTag() {
         stubTransactionManager();
         ParsedSosEvent event = sosEvent("FALL_DETECTED");
-        when(outboxMapper.insert(any(IotMqOutbox.class))).thenReturn(1);
+        when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(1);
 
         outboxService.handleSosEvent(event);
 
         ArgumentCaptor<IotMqOutbox> captor = ArgumentCaptor.forClass(IotMqOutbox.class);
-        verify(outboxMapper).insert(captor.capture());
+        verify(outboxMapper).insertOnConflict(captor.capture());
         assertEquals(MqTopicConstants.TAG_FALL, captor.getValue().getTag());
         assertEquals("FALL_DETECTED", captor.getValue().getEventType());
+        verify(sosEventProducer).send(any(IotMqOutbox.class));
     }
 
     @Test
@@ -83,44 +87,55 @@ class OutboxServiceTest {
         TraceContext.setTraceId("trace-retry");
         try {
             ParsedSosEvent event = sosEvent("SOS_TRIGGERED");
-            when(outboxMapper.insert(any(IotMqOutbox.class))).thenReturn(1);
+            when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(1);
 
             outboxService.handleSosEvent(event);
 
             ArgumentCaptor<IotMqOutbox> captor = ArgumentCaptor.forClass(IotMqOutbox.class);
-            verify(outboxMapper).insert(captor.capture());
-            assertEquals("trace-retry", captor.getValue().getPayload().get("traceId"));
+            verify(outboxMapper).insertOnConflict(captor.capture());
+            IotMqOutbox outbox = captor.getValue();
+            assertNotNull(outbox.getRawEnvelope());
+            assertEquals("trace-retry", outbox.getRawEnvelope().get("traceId"));
+            // C05 元数据字段只在信封顶层，payload 中不再冗余
+            assertFalse(outbox.getPayload().containsKey("traceId"));
+            assertFalse(outbox.getPayload().containsKey("occurredAt"));
         } finally {
             TraceContext.clear();
         }
     }
 
     @Test
-    void markSent_updatesStatus() {
-        IotMqOutbox outbox = new IotMqOutbox();
-        outbox.setEventId("EVT-1");
-        outbox.setStatus(OutboxStatus.PENDING.getCode());
-        when(outboxMapper.selectOne(any())).thenReturn(outbox);
-        when(outboxMapper.updateById(outbox)).thenReturn(1);
+    void markSent_updatesStatusConditionally() {
+        when(outboxMapper.updateStatusConditionally(eq("EVT-1"), eq(OutboxStatus.SENT.getCode()),
+                eq(OutboxStatus.PENDING.getCode()), any(OffsetDateTime.class))).thenReturn(1);
 
         assertTrue(outboxService.markSent("EVT-1"));
-        assertEquals(OutboxStatus.SENT.getCode(), outbox.getStatus());
-        assertNotNull(outbox.getSentAt());
+    }
+
+    @Test
+    void markSent_conflict_reportsMetric() {
+        when(outboxMapper.updateStatusConditionally(eq("EVT-1"), eq(OutboxStatus.SENT.getCode()),
+                eq(OutboxStatus.PENDING.getCode()), any(OffsetDateTime.class))).thenReturn(0);
+
+        assertFalse(outboxService.markSent("EVT-1"));
+        verify(metrics).outboxStatusConflict("EVT-1", OutboxStatus.PENDING.getCode(), "unknown");
     }
 
     @Test
     void recordFailure_incrementsRetryCount_andKeepsPending() {
-        IotMqOutbox outbox = new IotMqOutbox();
-        outbox.setEventId("EVT-1");
-        outbox.setRetryCount(2);
-        when(outboxMapper.selectOne(any())).thenReturn(outbox);
-        when(outboxMapper.updateById(outbox)).thenReturn(1);
+        when(outboxMapper.updateFailureConditionally("EVT-1", OutboxStatus.PENDING.getCode(),
+                OutboxStatus.PENDING.getCode(), 3, "mq timeout")).thenReturn(1);
 
-        assertTrue(outboxService.recordFailure("EVT-1", "mq timeout"));
+        assertTrue(outboxService.recordFailure("EVT-1", 3, "mq timeout"));
+    }
 
-        assertEquals(3, outbox.getRetryCount());
-        assertEquals("mq timeout", outbox.getLastError());
-        assertEquals(OutboxStatus.PENDING.getCode(), outbox.getStatus());
+    @Test
+    void unknownEventType_rejects() {
+        ParsedSosEvent event = sosEvent("UNKNOWN_EVENT");
+
+        assertThrows(IllegalArgumentException.class, () -> outboxService.handleSosEvent(event));
+        verify(outboxMapper, never()).insertOnConflict(any());
+        verify(transactionManager, never()).getTransaction(any());
     }
 
     private ParsedSosEvent sosEvent(String eventType) {
@@ -130,13 +145,9 @@ class OutboxServiceTest {
                 Map.of("locationId", "LOC-001"), "BUTTON_PRESS", 85, null);
     }
 
-    /**
-     * 提供一个极简的 PlatformTransactionManager 桩，使 TransactionTemplate.execute 同步执行回调。
-     */
     private void stubTransactionManager() {
         when(transactionManager.getTransaction(any(TransactionDefinition.class)))
                 .thenReturn(new SimpleTransactionStatus());
         doNothing().when(transactionManager).commit(any(TransactionStatus.class));
-        // rollback 在当前测试场景不会触发，不 stub 以避免 UnnecessaryStubbing
     }
 }

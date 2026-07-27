@@ -21,6 +21,10 @@ import java.util.concurrent.atomic.AtomicReference;
  * Automatic reconnect is disabled on the Paho client; this class controls
  * reconnection timing (1s → 2s → 4s → 8s → 16s → 32s → 60s cap) via a
  * {@link ScheduledExecutorService}.
+ * <p>
+ * P0 可靠性：启用 Paho manual acks + cleanSession=false。QoS1/2 消息只有在被
+ * iot-service 可靠处理（P0 进入 Outbox 事务/体征进入 Disruptor 管线）后才会 ack；
+ * 若背压导致无法入队，则不 ack，broker 会按持久会话重发。
  */
 @Component
 public class MqttConnectionManager {
@@ -35,7 +39,7 @@ public class MqttConnectionManager {
 
     @FunctionalInterface
     public interface MessageHandler {
-        void handle(String topic, byte[] payload);
+        void handle(InboundMqttMessage message);
     }
 
     private final MqttConfig mqttConfig;
@@ -72,6 +76,7 @@ public class MqttConnectionManager {
                 mqttClient = new MqttClient(mqttConfig.getBrokerUrl(),
                         mqttConfig.getClientId(), new MemoryPersistence());
                 mqttClient.setCallback(new InternalCallback());
+                mqttClient.setManualAcks(true);
             }
 
             if (mqttClient.isConnected()) {
@@ -127,6 +132,27 @@ public class MqttConnectionManager {
         this.messageHandler.set(handler);
     }
 
+    /**
+     * 手动确认一条入站消息。由可恢复链路（如 Outbox 事务提交后）调用。
+     */
+    public void ack(InboundMqttMessage message) {
+        MqttClient client = mqttClient;
+        if (client == null || !client.isConnected()) {
+            log.debug("MQTT 未连接，无法 ack: messageId={}", message.messageId());
+            return;
+        }
+        if (!message.requiresAck()) {
+            return;
+        }
+        try {
+            client.messageArrivedComplete(message.messageId(), message.qos());
+            log.debug("MQTT ack 成功: messageId={}, qos={}", message.messageId(), message.qos());
+        } catch (MqttException e) {
+            log.warn("MQTT ack 失败: messageId={}, qos={}, error={}",
+                    message.messageId(), message.qos(), e.getMessage());
+        }
+    }
+
     // ──────────────────────────── Lifecycle ─────────────────────────────
 
     @PreDestroy
@@ -153,7 +179,9 @@ public class MqttConnectionManager {
 
     private MqttConnectOptions buildConnectOptions() {
         MqttConnectOptions options = new MqttConnectOptions();
-        options.setCleanSession(true);
+        // cleanSession=false 配合 manual acks：broker 在断连期间持久化 QoS1/2 消息，
+        // 未 ack 的消息会在重连后重发。
+        options.setCleanSession(false);
         options.setConnectionTimeout(10);
         options.setKeepAliveInterval(30);
         options.setAutomaticReconnect(false);
@@ -260,8 +288,15 @@ public class MqttConnectionManager {
         public void messageArrived(String topic, MqttMessage message) {
             MessageHandler handler = messageHandler.get();
             if (handler != null) {
+                InboundMqttMessage inbound = new InboundMqttMessage(
+                        topic,
+                        message.getPayload(),
+                        message.getId(),
+                        message.getQos(),
+                        msg -> ack(msg)
+                );
                 try {
-                    handler.handle(topic, message.getPayload());
+                    handler.handle(inbound);
                 } catch (Exception e) {
                     log.error("Error in message handler for topic '{}': {}", topic, e.getMessage(), e);
                 }

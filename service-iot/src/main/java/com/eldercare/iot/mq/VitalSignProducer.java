@@ -1,11 +1,13 @@
 package com.eldercare.iot.mq;
 
+import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendCallback;
 import org.apache.rocketmq.client.producer.SendResult;
+import org.apache.rocketmq.client.producer.SendStatus;
 import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
@@ -24,7 +26,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * C04 体征信封生产者。
  * <p>
  * Topic: elder-vital-raw，Tag 按设备类型。
- * 异步发送，单条独立消息；失败由调度器重试 3 次（10s/30s/60s）。
+ * 异步发送，单条独立消息；失败严格按 10s/30s/60s 调度三次重试。
+ * <p>
+ * 注意：C04 按当前需求不持久化体征，"生产端失败入死信"与"不持久化体征"存在设计矛盾；
+ * 本类不伪造 DLQ，重试三次失败后计数、日志告警并丢弃（方案 A 默认实现）。
  */
 @Slf4j
 @Component
@@ -35,10 +40,12 @@ public class VitalSignProducer {
     private static final int SCHEMA_VERSION = 1;
     private static final int MAX_RETRIES = 3;
     private static final long[] RETRY_DELAYS_MS = {10_000L, 30_000L, 60_000L};
+    static final String TRACE_ID_HEADER = "X-Trace-Id";
 
     private final RocketMQTemplate rocketMQTemplate;
     private final ObjectMapper objectMapper;
     private final ScheduledExecutorService iotRetryScheduler;
+    private final IotMetrics metrics;
 
     private final Map<String, AtomicInteger> retryCounters = new ConcurrentHashMap<>();
 
@@ -53,34 +60,44 @@ public class VitalSignProducer {
             json = buildMessageJson(event);
         } catch (Exception e) {
             log.error("体征信封序列化失败: eventId={}", event.eventId(), e);
+            metrics.mqFailed(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), "serialization_failure");
             return;
         }
 
-        Message<String> message = MessageBuilder.withPayload(json).build();
+        Message<String> message = MessageBuilder.withPayload(json)
+                .setHeader(TRACE_ID_HEADER, event.traceId())
+                .build();
         retryCounters.computeIfAbsent(event.eventId(), k -> new AtomicInteger(0));
 
         rocketMQTemplate.asyncSend(destination, message, new SendCallback() {
             @Override
             public void onSuccess(SendResult sendResult) {
                 retryCounters.remove(event.eventId());
+                metrics.mqSent(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType());
                 log.debug("体征发送成功: eventId={}, topic={}", event.eventId(), destination);
             }
 
             @Override
             public void onException(Throwable e) {
-                int currentAttempt = retryCounters.getOrDefault(event.eventId(), new AtomicInteger(0)).incrementAndGet();
+                int currentAttempt = retryCounters.get(event.eventId()).incrementAndGet();
                 log.warn("体征发送失败: eventId={}, attempt={}", event.eventId(), currentAttempt, e);
-                if (currentAttempt < MAX_RETRIES) {
+                metrics.mqRetried(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), currentAttempt);
+                if (currentAttempt <= MAX_RETRIES) {
                     long delay = RETRY_DELAYS_MS[currentAttempt - 1];
                     iotRetryScheduler.schedule(() -> sendInternal(event, currentAttempt), delay, TimeUnit.MILLISECONDS);
                 } else {
                     retryCounters.remove(event.eventId());
-                    log.error("体征发送最终失败，已入死信通道: eventId={}", event.eventId());
+                    metrics.mqFailed(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), e.getMessage());
+                    log.error("体征发送三次重试后仍未成功，按默认策略丢弃: eventId={}", event.eventId());
                 }
             }
         }, 3_000L);
     }
 
+    /**
+     * 构建 C04 体征信封：rawPayload 先写入，再由平台固定字段覆盖；
+     * 固定字段始终存在，elder_id 输出字符串或显式 null。
+     */
     private String buildMessageJson(ParsedVitalSign event) throws Exception {
         Map<String, Object> envelope = new LinkedHashMap<>();
         envelope.put("eventId", event.eventId());
@@ -91,12 +108,16 @@ public class VitalSignProducer {
         envelope.put("producer", MqTopicConstants.PRODUCER);
 
         Map<String, Object> payload = new LinkedHashMap<>();
+        // ① 先写入厂商 rawPayload
+        if (event.rawPayload() != null) {
+            payload.putAll(event.rawPayload());
+        }
+        // ② 平台固定字段覆盖，禁止厂商字段覆盖 sourceMessageId/device_id/elder_id/data_time
         payload.put("sourceMessageId", event.sourceMessageId());
         payload.put("device_id", event.deviceId());
-        if (event.elderId() != null) {
-            payload.put("elder_id", String.valueOf(event.elderId()));
-        }
+        payload.put("elder_id", event.elderId() != null ? String.valueOf(event.elderId()) : null);
         payload.put("data_time", toEpochMillis(event.occurredAt()));
+        // ③ 可选体征字段
         if (event.heartRate() != null) {
             payload.put("heart_rate", event.heartRate());
         }
@@ -108,9 +129,6 @@ public class VitalSignProducer {
         }
         if (event.bedStatus() != null) {
             payload.put("bed_status", event.bedStatus());
-        }
-        if (event.rawPayload() != null) {
-            payload.putAll(event.rawPayload());
         }
         envelope.put("payload", payload);
 

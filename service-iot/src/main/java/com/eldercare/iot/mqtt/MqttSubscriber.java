@@ -2,6 +2,7 @@ package com.eldercare.iot.mqtt;
 
 import com.eldercare.common.core.utils.IdUtil;
 import com.eldercare.common.core.utils.TraceContext;
+import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.RawDeviceMessage;
 import com.eldercare.iot.pipeline.DisruptorPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,10 +16,11 @@ import java.util.Optional;
 
 /**
  * MQTT 消息订阅器 — Phase 5 管线：
- * TopicRouter → MessageValidator → 构造 RawDeviceMessage → 生成 eventId → Disruptor RingBuffer 投递。
+ * TopicRouter → MessageValidator → Topic deviceId 与信封 deviceId 一致性校验 →
+ * 构造 RawDeviceMessage（含 MQTT ack 凭证）→ 非阻塞 Disruptor 投递。
  * <p>
- * Paho 回调线程只做 Topic 路由、格式校验、信封元数据提取和 RingBuffer 投递，
- * 全程无 I/O（无 DB 查询、无网络调用）。
+ * Paho 回调线程只做路由、校验、元数据提取和 RingBuffer 投递，全程无 I/O。
+ * 若 RingBuffer 满，不阻塞回调线程，也不对 MQTT 做 ack，依赖 broker 重发。
  */
 @Slf4j
 @Component
@@ -28,15 +30,18 @@ public class MqttSubscriber {
     private final TopicRouter topicRouter;
     private final MessageValidator messageValidator;
     private final DisruptorPublisher disruptorPublisher;
+    private final IotMetrics metrics;
 
     public MqttSubscriber(MqttConnectionManager connectionManager,
                           TopicRouter topicRouter,
                           MessageValidator messageValidator,
-                          DisruptorPublisher disruptorPublisher) {
+                          DisruptorPublisher disruptorPublisher,
+                          IotMetrics metrics) {
         this.connectionManager = connectionManager;
         this.topicRouter = topicRouter;
         this.messageValidator = messageValidator;
         this.disruptorPublisher = disruptorPublisher;
+        this.metrics = metrics;
     }
 
     @PostConstruct
@@ -53,13 +58,17 @@ public class MqttSubscriber {
     /**
      * Paho 回调入口 — 不执行任何 I/O。
      */
-    private void handleMessage(String topic, byte[] payload) {
+    private void handleMessage(InboundMqttMessage inbound) {
         String traceId = TraceContext.generateTraceId();
         TraceContext.setTraceId(traceId);
         try {
+            String topic = inbound.topic();
+            byte[] payload = inbound.payload();
+
             // ① Topic 路由
             Optional<TopicRouter.RouteResult> routeOpt = topicRouter.route(topic);
             if (routeOpt.isEmpty()) {
+                metrics.mqttMessageRejected("invalid_topic");
                 return;
             }
             TopicRouter.RouteResult route = routeOpt.get();
@@ -67,6 +76,7 @@ public class MqttSubscriber {
             // ② 消息校验（无 I/O）
             Optional<JsonNode> envelopeOpt = messageValidator.validate(payload);
             if (envelopeOpt.isEmpty()) {
+                metrics.mqttMessageRejected("invalid_payload");
                 return;
             }
             JsonNode envelope = envelopeOpt.get();
@@ -78,19 +88,28 @@ public class MqttSubscriber {
             String protocolVersion = envelope.get("protocolVersion").asText();
             String occurredAtStr = envelope.get("occurredAt").asText();
 
-            // ④ 生成 eventId（雪花 ID 十进制字符串）
+            // ④ Topic deviceId 与信封 deviceId 一致性校验
+            if (!route.deviceId().equals(deviceId)) {
+                log.warn("Topic deviceId 与信封 deviceId 不一致: topicDeviceId={}, envelopeDeviceId={}, traceId={}",
+                        route.deviceId(), deviceId, traceId);
+                metrics.mqttMessageRejected("device_id_mismatch");
+                return;
+            }
+
+            // ⑤ 生成 eventId（雪花 ID 十进制字符串）
             String eventId = String.valueOf(IdUtil.nextId());
 
-            // ⑤ 解析 occurredAt
+            // ⑥ 解析 occurredAt；非法时间戳直接拒绝，不得替换为当前时间
             OffsetDateTime occurredAt;
             try {
                 occurredAt = OffsetDateTime.parse(occurredAtStr);
             } catch (Exception e) {
-                log.warn("occurredAt 解析失败，使用当前时间: {}", occurredAtStr);
-                occurredAt = OffsetDateTime.now();
+                log.warn("occurredAt 非法，拒绝消息: occurredAt={}, traceId={}", occurredAtStr, traceId);
+                metrics.mqttMessageRejected("invalid_occurred_at");
+                return;
             }
 
-            // ⑥ 构造原始消息并投递到 Disruptor
+            // ⑦ 构造原始消息并投递到 Disruptor
             RawDeviceMessage rawMessage = new RawDeviceMessage(
                     topic,
                     envelope,
@@ -100,16 +119,27 @@ public class MqttSubscriber {
                     messageType,
                     eventId,
                     traceId,
-                    occurredAt
+                    occurredAt,
+                    inbound.messageId(),
+                    inbound.qos(),
+                    inbound
             );
-            disruptorPublisher.publish(rawMessage);
+            boolean accepted = disruptorPublisher.publish(rawMessage);
+            if (!accepted) {
+                // RingBuffer 满：不阻塞回调，不 ack MQTT，依赖 broker 重发
+                log.warn("Disruptor RingBuffer 已满，拒绝入站消息: deviceId={}, traceId={}", deviceId, traceId);
+                metrics.ringBufferRejected();
+                return;
+            }
 
+            metrics.mqttMessageReceived(route.deviceType());
             log.info("MQTT 消息已投递 Disruptor: eventId={}, messageId={}, deviceId={}, messageType={}, " +
-                     "protocolVersion={}, traceId={}",
-                    eventId, messageId, deviceId, messageType, protocolVersion, traceId);
+                     "protocolVersion={}, traceId={}, mqttMessageId={}, mqttQos={}",
+                    eventId, messageId, deviceId, messageType, protocolVersion, traceId,
+                    inbound.messageId(), inbound.qos());
 
         } catch (Exception e) {
-            log.error("MQTT 消息处理异常: topic={}, traceId={}", topic, traceId, e);
+            log.error("MQTT 消息处理异常: traceId={}", traceId, e);
         } finally {
             TraceContext.clear();
         }

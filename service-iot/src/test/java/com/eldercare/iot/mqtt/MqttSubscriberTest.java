@@ -1,5 +1,6 @@
 package com.eldercare.iot.mqtt;
 
+import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.RawDeviceMessage;
 import com.eldercare.iot.pipeline.DisruptorPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,7 +19,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * MqttSubscriber 单元测试：验证 Topic 路由、格式校验、信封元数据提取、eventId 生成与 Disruptor 投递。
+ * MqttSubscriber 单元测试：验证 Topic 路由、格式校验、信封元数据提取、eventId 生成与 Disruptor 非阻塞投递。
  */
 @ExtendWith(MockitoExtension.class)
 class MqttSubscriberTest {
@@ -31,6 +32,8 @@ class MqttSubscriberTest {
     MessageValidator messageValidator;
     @Mock
     DisruptorPublisher disruptorPublisher;
+    @Mock
+    IotMetrics metrics;
 
     @InjectMocks
     MqttSubscriber subscriber;
@@ -59,8 +62,9 @@ class MqttSubscriberTest {
         when(topicRouter.route(topic)).thenReturn(Optional.of(
                 new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
         when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
+        when(disruptorPublisher.publish(any(RawDeviceMessage.class))).thenReturn(true);
 
-        dispatch(topic, payload);
+        dispatch(topic, payload, 1, 1);
 
         ArgumentCaptor<RawDeviceMessage> captor = ArgumentCaptor.forClass(RawDeviceMessage.class);
         verify(disruptorPublisher).publish(captor.capture());
@@ -73,6 +77,8 @@ class MqttSubscriberTest {
         assertNotNull(raw.eventId());
         assertTrue(raw.eventId().matches("\\d+"), "eventId 应为雪花 ID 十进制字符串");
         assertNotNull(raw.traceId());
+        assertEquals(1, raw.mqttMessageId());
+        assertEquals(1, raw.mqttQos());
     }
 
     @Test
@@ -80,7 +86,7 @@ class MqttSubscriberTest {
         String topic = "bad/topic";
         when(topicRouter.route(topic)).thenReturn(Optional.empty());
 
-        dispatch(topic, "{}");
+        dispatch(topic, "{}", 1, 1);
 
         verify(disruptorPublisher, never()).publish(any());
     }
@@ -92,9 +98,94 @@ class MqttSubscriberTest {
                 new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
         when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.empty());
 
-        dispatch(topic, "{}");
+        dispatch(topic, "{}", 1, 1);
 
         verify(disruptorPublisher, never()).publish(any());
+    }
+
+    @Test
+    void deviceIdMismatch_isRejected() {
+        String topic = "elder/P001/MATTRESS/DEV-001/up/telemetry";
+        String payload = """
+                {
+                    "messageId": "msg-001",
+                    "deviceId": "DEV-999",
+                    "messageType": "VITAL_SIGN",
+                    "protocolVersion": "1.0",
+                    "occurredAt": "2026-07-24T02:30:00Z"
+                }
+                """;
+        when(topicRouter.route(topic)).thenReturn(Optional.of(
+                new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
+        JsonNode envelope;
+        try {
+            envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
+
+        dispatch(topic, payload, 1, 1);
+
+        verify(disruptorPublisher, never()).publish(any());
+        verify(metrics).mqttMessageRejected("device_id_mismatch");
+    }
+
+    @Test
+    void invalidOccurredAt_isRejected() {
+        String topic = "elder/P001/MATTRESS/DEV-001/up/telemetry";
+        String payload = """
+                {
+                    "messageId": "msg-001",
+                    "deviceId": "DEV-001",
+                    "messageType": "VITAL_SIGN",
+                    "protocolVersion": "1.0",
+                    "occurredAt": "not-a-timestamp"
+                }
+                """;
+        when(topicRouter.route(topic)).thenReturn(Optional.of(
+                new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
+        JsonNode envelope;
+        try {
+            envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
+
+        dispatch(topic, payload, 1, 1);
+
+        verify(disruptorPublisher, never()).publish(any());
+        verify(metrics).mqttMessageRejected("invalid_occurred_at");
+    }
+
+    @Test
+    void ringBufferFull_doesNotBlockAndRejects() {
+        String topic = "elder/P001/MATTRESS/DEV-001/up/telemetry";
+        String payload = """
+                {
+                    "messageId": "msg-001",
+                    "deviceId": "DEV-001",
+                    "messageType": "VITAL_SIGN",
+                    "protocolVersion": "1.0",
+                    "occurredAt": "2026-07-24T02:30:00Z"
+                }
+                """;
+        when(topicRouter.route(topic)).thenReturn(Optional.of(
+                new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
+        JsonNode envelope;
+        try {
+            envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
+        when(disruptorPublisher.publish(any(RawDeviceMessage.class))).thenReturn(false);
+
+        dispatch(topic, payload, 1, 1);
+
+        verify(disruptorPublisher).publish(any(RawDeviceMessage.class));
+        verify(metrics).ringBufferRejected();
     }
 
     @Test
@@ -103,10 +194,11 @@ class MqttSubscriberTest {
         verify(connectionManager).disconnect();
     }
 
-    private void dispatch(String topic, String payload) {
+    private void dispatch(String topic, String payload, int messageId, int qos) {
         ArgumentCaptor<MqttConnectionManager.MessageHandler> captor = ArgumentCaptor.forClass(MqttConnectionManager.MessageHandler.class);
         subscriber.init();
         verify(connectionManager).setMessageHandler(captor.capture());
-        captor.getValue().handle(topic, payload.getBytes(StandardCharsets.UTF_8));
+        InboundMqttMessage inbound = new InboundMqttMessage(topic, payload.getBytes(StandardCharsets.UTF_8), messageId, qos, msg -> {});
+        captor.getValue().handle(inbound);
     }
 }

@@ -1,25 +1,33 @@
 package com.eldercare.iot.mq;
 
-import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.iot.entity.IotMqOutbox;
 import com.eldercare.iot.enums.OutboxStatus;
 import com.eldercare.iot.mapper.IotMqOutboxMapper;
+import com.eldercare.iot.metrics.IotMetrics;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Executor;
 
 /**
- * Outbox 补发任务：定时扫描 PENDING 记录，复用原始 eventId 与 payload 补发 C05。
+ * Outbox 补发任务：原子 claim/租约机制防止首次发送与定时扫描、多个实例扫描重复并发发送。
  * <p>
- * 补发不检查设备当前 lifecycle_status；可恢复 MQ 失败持续保持 PENDING 并告警，
- * 仅不可恢复数据错误（如 payload 缺失）才标记 FAILED。
+ * 1. 每次扫描通过 {@code claimPendingRecords} 锁定最老未租约/已过期记录并设置租约；
+ * 2. 仅处理本实例领取到的记录；
+ * 3. 发送成功更新 SENT；失败延长租约，等待下次扫描；
+ * 4. 崩溃后租约会过期，其他实例可回收。
  */
 @Slf4j
 @Component
@@ -29,35 +37,61 @@ public class OutboxRetryTask {
     private final IotMqOutboxMapper outboxMapper;
     private final SosEventProducer sosEventProducer;
     private final Executor iotP0Executor;
+    private final IotMetrics metrics;
 
     @Value("${iot.outbox.retry.batch-size:100}")
     private int batchSize;
 
+    @Value("${iot.outbox.retry.lease-minutes:5}")
+    private int leaseMinutes;
+
+    private String instanceId;
+
+    @PostConstruct
+    public void init() {
+        String host;
+        try {
+            host = InetAddress.getLocalHost().getHostName();
+        } catch (UnknownHostException e) {
+            host = "unknown";
+        }
+        this.instanceId = host + "-" + UUID.randomUUID().toString().substring(0, 8);
+        metrics.registerOutboxPendingGauge("outbox_pending", outboxMapper::countPending);
+        metrics.registerOutboxOldestAgeGauge("outbox_oldest_age", () -> {
+            Long age = outboxMapper.oldestPendingAgeSeconds();
+            return age != null ? age : 0L;
+        });
+    }
+
     @Scheduled(fixedDelayString = "${iot.outbox.retry.fixed-delay-ms:10000}")
     public void retryPending() {
-        LambdaQueryWrapper<IotMqOutbox> wrapper = new LambdaQueryWrapper<IotMqOutbox>()
-                .eq(IotMqOutbox::getStatus, OutboxStatus.PENDING.getCode())
-                .orderByAsc(IotMqOutbox::getCreatedAt)
-                .last("LIMIT " + batchSize);
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime leaseExpireAt = now.plus(leaseMinutes, ChronoUnit.MINUTES);
 
-        List<IotMqOutbox> pending;
+        List<IotMqOutbox> claimed;
         try {
-            pending = outboxMapper.selectList(wrapper);
+            claimed = outboxMapper.claimPendingRecords(batchSize, now, leaseExpireAt, instanceId);
         } catch (Exception e) {
-            log.error("Outbox 补发扫描异常", e);
+            log.error("Outbox 补发 claim 异常", e);
             return;
         }
 
-        if (pending.isEmpty()) {
+        if (claimed.isEmpty()) {
             return;
         }
 
-        log.info("Outbox 补发扫描: {} 条 PENDING 记录", pending.size());
-        for (IotMqOutbox outbox : pending) {
-            // 不可恢复数据错误：payload 为空时直接标记 FAILED
-            if (outbox.getPayload() == null) {
-                log.error("Outbox payload 为空，标记 FAILED: eventId={}", outbox.getEventId());
-                markFailed(outbox);
+        log.info("Outbox 补发扫描: {} 条记录被实例 {} 领取", claimed.size(), instanceId);
+        for (IotMqOutbox outbox : claimed) {
+            // 不可恢复数据错误：rawEnvelope 为空时直接标记 FAILED
+            if (outbox.getRawEnvelope() == null) {
+                log.error("Outbox rawEnvelope 为空，标记 FAILED: eventId={}", outbox.getEventId());
+                outboxMapper.updateFailureConditionally(
+                        outbox.getEventId(),
+                        OutboxStatus.FAILED.getCode(),
+                        OutboxStatus.PENDING.getCode(),
+                        outbox.getRetryCount() == null ? 0 : outbox.getRetryCount(),
+                        "rawEnvelope 为空，不可恢复"
+                );
                 continue;
             }
 
@@ -65,6 +99,9 @@ public class OutboxRetryTask {
                 try {
                     TraceContext.setTraceId(extractTraceId(outbox));
                     sosEventProducer.send(outbox);
+                } catch (Exception e) {
+                    log.error("Outbox 补发执行异常: eventId={}", outbox.getEventId(), e);
+                    extendLease(outbox);
                 } finally {
                     TraceContext.clear();
                 }
@@ -72,18 +109,21 @@ public class OutboxRetryTask {
         }
     }
 
-    private void markFailed(IotMqOutbox outbox) {
+    private void extendLease(IotMqOutbox outbox) {
         try {
-            outbox.setStatus(OutboxStatus.FAILED.getCode());
-            outbox.setLastError("payload 为空，不可恢复");
-            outboxMapper.updateById(outbox);
+            OffsetDateTime leaseExpireAt = OffsetDateTime.now().plus(leaseMinutes, ChronoUnit.MINUTES);
+            outboxMapper.updateLease(outbox.getEventId(), leaseExpireAt, instanceId);
         } catch (Exception e) {
-            log.error("标记 Outbox FAILED 失败: eventId={}", outbox.getEventId(), e);
+            log.error("延长 Outbox 租约失败: eventId={}", outbox.getEventId(), e);
         }
     }
 
     @SuppressWarnings("unchecked")
     private String extractTraceId(IotMqOutbox outbox) {
+        Map<String, Object> rawEnvelope = outbox.getRawEnvelope();
+        if (rawEnvelope != null && rawEnvelope.get("traceId") instanceof String traceId) {
+            return traceId;
+        }
         Map<String, Object> payload = outbox.getPayload();
         if (payload != null && payload.get("traceId") instanceof String traceId) {
             return traceId;

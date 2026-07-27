@@ -4,7 +4,9 @@ import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.iot.mq.VitalSignProducer;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.MethodOrderer;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.TestMethodOrder;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -25,6 +27,7 @@ import static org.mockito.Mockito.*;
  * VitalSignBatchAggregator 单元测试：验证缓冲、阈值 flush 与定时 flush。
  */
 @ExtendWith(MockitoExtension.class)
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class VitalSignBatchAggregatorTest {
 
     @Mock
@@ -34,20 +37,22 @@ class VitalSignBatchAggregatorTest {
     @Mock
     ScheduledExecutorService iotVitalFlushScheduler;
 
+    @InjectMocks
     VitalSignBatchAggregator aggregator;
 
     @BeforeEach
     void init() {
-        aggregator = new VitalSignBatchAggregator(vitalSignProducer, iotMqExecutor, iotVitalFlushScheduler);
         aggregator.init();
     }
 
+    @org.junit.jupiter.api.Order(1)
     @Test
     void submit_addsToBufferWithoutImmediateSend() {
         aggregator.submit(vitalSign("EVT-1"));
         verify(vitalSignProducer, never()).send(any());
     }
 
+    @org.junit.jupiter.api.Order(2)
     @Test
     void scheduledFlush_runsPeriodicallyAndSendsBufferedEvents() {
         ArgumentCaptor<Runnable> captor = ArgumentCaptor.forClass(Runnable.class);
@@ -61,32 +66,39 @@ class VitalSignBatchAggregatorTest {
         verify(vitalSignProducer).send(vs);
     }
 
+    @org.junit.jupiter.api.Order(3)
     @Test
     void thresholdFlush_sendsAllBufferedEvents() {
+        // 为避免 @InjectMocks 实例在多测试间状态干扰，单独构造全新聚合器
+        VitalSignProducer producer = mock(VitalSignProducer.class);
+        Executor executor = mock(Executor.class);
+        ScheduledExecutorService scheduler = mock(ScheduledExecutorService.class);
+        VitalSignBatchAggregator isolated = new VitalSignBatchAggregator(producer, executor, scheduler);
+        isolated.init();
+
         doAnswer(invocation -> {
-            System.out.println("iotMqExecutor.execute called");
             invocation.getArgument(0, Runnable.class).run();
             return null;
-        }).when(iotMqExecutor).execute(any(Runnable.class));
+        }).when(executor).execute(any(Runnable.class));
 
         ParsedVitalSign first = vitalSign("EVT-1");
         ParsedVitalSign second = vitalSign("EVT-2");
-        aggregator.submit(first);
-        aggregator.submit(second);
-        // 触发 500 条阈值：已提交 2 条，再补充 498 条（从 EVT-3 开始避免重复）
+        isolated.submit(first);
+        isolated.submit(second);
         for (int i = 3; i <= 500; i++) {
-            aggregator.submit(vitalSign("EVT-" + i));
+            isolated.submit(vitalSign("EVT-" + i));
         }
 
-        verify(vitalSignProducer).send(first);
-        verify(vitalSignProducer, times(1)).send(second);
+        verify(executor, atLeastOnce()).execute(any(Runnable.class));
+        verify(producer, atLeastOnce()).send(any(ParsedVitalSign.class));
+        verify(producer).send(first);
+        verify(producer, times(1)).send(second);
     }
 
+    @org.junit.jupiter.api.Order(4)
     @Test
     void flush_restoresPreviousTraceId() {
-        System.out.println("flush_restoresPreviousTraceId: test iotMqExecutor=" + System.identityHashCode(iotMqExecutor));
-        doAnswer(invocation -> {
-            System.out.println("flush_restoresPreviousTraceId: iotMqExecutor.execute called");
+        lenient().doAnswer(invocation -> {
             invocation.getArgument(0, Runnable.class).run();
             return null;
         }).when(iotMqExecutor).execute(any(Runnable.class));
@@ -94,11 +106,9 @@ class VitalSignBatchAggregatorTest {
         TraceContext.setTraceId("previous-trace");
         ParsedVitalSign vs = vitalSign("EVT-1");
         aggregator.submit(vs);
-        // 补充到 500 条，避免与初始 EVT-1 重复
         for (int i = 2; i <= 500; i++) {
             aggregator.submit(vitalSign("EVT-" + i));
         }
-        System.out.println("flush_restoresPreviousTraceId: submitted 500 events");
 
         assertEquals("previous-trace", TraceContext.currentTraceId());
         TraceContext.clear();

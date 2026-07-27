@@ -2,6 +2,7 @@ package com.eldercare.iot.pipeline;
 
 import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.iot.mq.OutboxService;
+import com.eldercare.iot.mqtt.InboundMqttMessage;
 import com.eldercare.iot.parser.model.ParsedHeartbeat;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
@@ -16,6 +17,7 @@ import java.util.concurrent.Executor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 /**
@@ -51,7 +53,6 @@ class MessagePipelineTest {
     @Test
     void sosEvent_routesToP0ExecutorWithTraceId() {
         ParsedSosEvent sos = sosEvent("SOS_TRIGGERED");
-        // 同步执行，便于断言 traceId 在回调线程中被设置
         doAnswer(invocation -> {
             invocation.getArgument(0, Runnable.class).run();
             return null;
@@ -59,12 +60,12 @@ class MessagePipelineTest {
         doAnswer(invocation -> {
             assertEquals("trace-sos", TraceContext.currentTraceId());
             return null;
-        }).when(outboxService).handleSosEvent(any());
+        }).when(outboxService).handleSosEvent(any(ParsedSosEvent.class), any());
 
         pipeline.handle(sos, null);
 
         verify(iotP0Executor).execute(any(Runnable.class));
-        verify(outboxService).handleSosEvent(sos);
+        verify(outboxService).handleSosEvent(sos, null);
     }
 
     @Test
@@ -77,7 +78,7 @@ class MessagePipelineTest {
 
         pipeline.handle(fall, null);
 
-        verify(outboxService).handleSosEvent(fall);
+        verify(outboxService).handleSosEvent(fall, null);
     }
 
     @Test

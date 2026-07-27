@@ -1,6 +1,7 @@
 package com.eldercare.iot.mapper;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.eldercare.iot.IntegrationTestConfig;
 import com.eldercare.iot.entity.IotDeviceModel;
 import com.eldercare.iot.entity.IotDeviceInstance;
 import com.eldercare.iot.entity.IotDeviceBinding;
@@ -8,6 +9,7 @@ import com.eldercare.iot.entity.IotMqOutbox;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.time.OffsetDateTime;
@@ -21,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 @SpringBootTest
 @ActiveProfiles("test")
+@Import(IntegrationTestConfig.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class MapperCrudTest {
 

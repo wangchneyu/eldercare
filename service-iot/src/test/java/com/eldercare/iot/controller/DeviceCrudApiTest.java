@@ -1,5 +1,6 @@
 package com.eldercare.iot.controller;
 
+import com.eldercare.iot.IntegrationTestConfig;
 import com.eldercare.iot.dto.request.*;
 import com.eldercare.iot.dto.vo.*;
 import com.eldercare.iot.entity.IotDeviceModel;
@@ -12,6 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
@@ -25,6 +27,7 @@ import static com.eldercare.iot.support.WebTestClientMvcAdapter.*;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
+@Import(IntegrationTestConfig.class)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DeviceCrudApiTest {
 

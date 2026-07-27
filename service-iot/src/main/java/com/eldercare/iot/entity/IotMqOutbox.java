@@ -10,7 +10,10 @@ import java.time.OffsetDateTime;
 import java.util.Map;
 
 /**
- * P0 事件发件箱 — iot_mq_outbox
+ * P0 事件发件箱 — iot_mq_outbox。
+ * <p>
+ * payload 保存完整的 C05 原始信封（含 eventId/occurredAt/traceId/payload），
+ * 首发与补发均直接序列化该信封，禁止在补发时按当前时间重新拼装。
  */
 @Data
 @TableName(value = "iot_mq_outbox", autoResultMap = true)
@@ -37,6 +40,10 @@ public class IotMqOutbox implements Serializable {
     @TableField(typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> payload;
 
+    /** 完整 C05 原始信封 JSON（首发/补发字节级一致） */
+    @TableField(typeHandler = JsonbTypeHandler.class)
+    private Map<String, Object> rawEnvelope;
+
     private String status;
 
     private Integer retryCount;
@@ -46,4 +53,10 @@ public class IotMqOutbox implements Serializable {
     private OffsetDateTime createdAt;
 
     private OffsetDateTime sentAt;
+
+    /** 租约过期时间，用于原子 claim/并发控制 */
+    private OffsetDateTime leaseExpireAt;
+
+    /** 领取该记录的实例标识 */
+    private String claimedBy;
 }

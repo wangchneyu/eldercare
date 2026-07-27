@@ -6,6 +6,7 @@ import com.eldercare.iot.parser.model.ParsedEvent;
 import com.eldercare.iot.parser.model.ParsedHeartbeat;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
+import com.eldercare.iot.parser.model.RawDeviceMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -28,19 +29,18 @@ public class MessagePipeline {
     private final OutboxService outboxService;
     private final Executor iotP0Executor;
 
-    public void handle(ParsedEvent event, com.eldercare.iot.parser.model.RawDeviceMessage raw) {
+    public void handle(ParsedEvent event, RawDeviceMessage raw) {
         if (event == null) {
             return;
         }
         String traceId = event.traceId();
         if (event instanceof ParsedVitalSign) {
             vitalSignBatchAggregator.submit((ParsedVitalSign) event);
-        } else if (event instanceof ParsedSosEvent) {
-            ParsedSosEvent sos = (ParsedSosEvent) event;
+        } else if (event instanceof ParsedSosEvent sos) {
             iotP0Executor.execute(() -> {
                 try {
                     TraceContext.setTraceId(traceId);
-                    outboxService.handleSosEvent(sos);
+                    outboxService.handleSosEvent(sos, raw != null ? raw.inboundMqttMessage() : null);
                 } finally {
                     TraceContext.clear();
                 }
