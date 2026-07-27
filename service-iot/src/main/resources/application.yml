@@ -4,10 +4,10 @@ server:
 spring:
   application:
     name: service-iot
+  main:
+    web-application-type: reactive
   profiles:
     active: dev
-  config:
-    import: "optional:nacos:service-iot.yaml"
   cloud:
     nacos:
       discovery:
@@ -70,3 +70,11 @@ logging:
     com.eldercare.iot: DEBUG
     org.apache.rocketmq: WARN
     org.eclipse.paho: INFO
+
+---
+
+spring:
+  config:
+    activate:
+      on-profile: "!test"
+    import: "optional:nacos:service-iot.yaml"

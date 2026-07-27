@@ -6,31 +6,29 @@ import com.eldercare.iot.entity.IotDeviceModel;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
+import com.eldercare.iot.support.WebTestClientMvcAdapter;
+import com.eldercare.iot.support.WebTestClientMvcAdapter.MvcResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.time.OffsetDateTime;
 
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static com.eldercare.iot.support.WebTestClientMvcAdapter.*;
 
 /**
  * 阶段三验证 — 设备管理 CRUD 全流程 API 测试
  */
-@SpringBootTest
-@AutoConfigureMockMvc
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 class DeviceCrudApiTest {
 
-    @Autowired private MockMvc mockMvc;
+    @Autowired private WebTestClient webTestClient;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private IotDeviceModelMapper modelMapper;
     @Autowired private IotDeviceInstanceMapper instanceMapper;
@@ -39,6 +37,13 @@ class DeviceCrudApiTest {
     private static String testModelId;
     private static String testDeviceId;
     private static String bindTestDeviceId;
+
+    private WebTestClientMvcAdapter mockMvc;
+
+    @BeforeEach
+    void setUpClient() {
+        mockMvc = new WebTestClientMvcAdapter(webTestClient, objectMapper);
+    }
 
     // ==================== 型号 CRUD ====================
 

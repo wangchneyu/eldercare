@@ -12,7 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * <p>
  * 物联网接入服务：MQTT 设备接入、协议解析、消息分发。
  */
-@SpringBootApplication(scanBasePackages = "com.eldercare")
+@SpringBootApplication(scanBasePackages = "com.eldercare.iot")
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.eldercare")
 @EnableScheduling
