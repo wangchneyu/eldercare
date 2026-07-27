@@ -7,7 +7,7 @@ spring:
   profiles:
     active: dev
   config:
-    import: "optional:nacos:service-iot.yml"
+    import: "optional:nacos:service-iot.yaml"
   cloud:
     nacos:
       discovery:
@@ -18,7 +18,7 @@ spring:
         server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
         namespace: ${NACOS_NAMESPACE:}
         group: DEFAULT_GROUP
-        file-extension: yml
+        file-extension: yaml
   jackson:
     serialization:
       write-dates-as-timestamps: false

@@ -55,6 +55,7 @@ public class GatewaySecurityConfig {
 
         config.addAllowedMethod("*");
         config.addAllowedHeader("*");
+        config.addExposedHeader("X-Trace-Id");
         config.setAllowCredentials(true);
 
         long maxAge = corsProps != null ? corsProps.getMaxAge() : 3600L;

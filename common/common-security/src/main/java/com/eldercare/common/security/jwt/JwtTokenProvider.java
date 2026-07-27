@@ -7,7 +7,6 @@ import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 
@@ -16,12 +15,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
  * JWT Token 提供者：签发、验签、刷新、提取用户信息
  * <p>
- * 使用 HMAC-SHA256 签名算法，基于 jjwt 0.11.5 API
+ * 使用 HMAC-SHA256 签名算法，基于 jjwt 0.12.6 API
  */
 @Slf4j
 public class JwtTokenProvider {
@@ -31,11 +31,16 @@ public class JwtTokenProvider {
     private final long refreshTokenExpiration;
 
     /**
-     * @param secret                  签名密钥（明文，实际使用时会转为 HMAC-SHA256 密钥）
+     * @param secret                  签名密钥（明文，实际使用时会转为 HMAC-SHA256 密钥，最小 32 字符）
      * @param accessTokenExpiration   访问令牌过期时间（秒）
      * @param refreshTokenExpiration  刷新令牌过期时间（秒）
+     * @throws IllegalStateException 密钥为空或长度不足 32 字符时抛出
      */
     public JwtTokenProvider(String secret, long accessTokenExpiration, long refreshTokenExpiration) {
+        if (secret == null || secret.length() < 32) {
+            throw new IllegalStateException(
+                    "JWT 密钥长度不足，最小 32 字符（HS256 要求）。请通过环境变量 ELDERCARE_JWT_SECRET 或配置 eldercare.security.secret 设置");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpiration = accessTokenExpiration;
         this.refreshTokenExpiration = refreshTokenExpiration;
@@ -178,14 +183,15 @@ public class JwtTokenProvider {
                 : "";
 
         return Jwts.builder()
-                .setSubject(loginUser.getUsername())
+                .id(UUID.randomUUID().toString().replace("-", ""))
+                .subject(loginUser.getUsername())
                 .claim(SecurityConstants.CLAIM_USER_ID, loginUser.getUserId())
                 .claim(SecurityConstants.CLAIM_USERNAME, loginUser.getUsername())
                 .claim(SecurityConstants.CLAIM_ROLES, rolesStr)
                 .claim(SecurityConstants.CLAIM_TOKEN_TYPE, tokenType)
-                .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(secretKey, SignatureAlgorithm.HS256)
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(secretKey)
                 .compact();
     }
 
@@ -193,11 +199,11 @@ public class JwtTokenProvider {
      * 解析 Token Claims
      */
     private Claims parseClaims(String token) {
-        return Jwts.parserBuilder()
-                .setSigningKey(secretKey)
+        return Jwts.parser()
+                .verifyWith(secretKey)
                 .build()
-                .parseClaimsJws(token)
-                .getBody();
+                .parseSignedClaims(token)
+                .getPayload();
     }
 
     /**

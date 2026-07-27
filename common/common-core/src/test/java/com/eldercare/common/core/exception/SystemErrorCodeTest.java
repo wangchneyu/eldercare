@@ -16,14 +16,14 @@ public class SystemErrorCodeTest {
 
     @Test
     public void testErrorCodeCount() {
-        // 验证枚举数量：新增 VALIDATION_ERROR / NOT_FOUND / CONFLICT 后共 12 个
-        Assertions.assertEquals(12, SystemErrorCode.values().length);
+        // 与《错误码及异常设计》2.2 节一致，共 10 个枚举值
+        Assertions.assertEquals(10, SystemErrorCode.values().length);
     }
 
     @Test
     public void testSpecificErrorCodes() {
         Assertions.assertEquals(100001, SystemErrorCode.INTERNAL_ERROR.getCode());
         Assertions.assertEquals(100009, SystemErrorCode.NOT_FOUND.getCode());
-        Assertions.assertEquals(100010, SystemErrorCode.CONFLICT.getCode());
+        Assertions.assertEquals(110002, SystemErrorCode.FORBIDDEN.getCode());
     }
 }

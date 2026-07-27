@@ -4,7 +4,6 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.eldercare.common.core.exception.BizException;
-import com.eldercare.common.core.exception.SystemErrorCode;
 import com.eldercare.iot.dto.request.DeviceModelCreateRequest;
 import com.eldercare.iot.dto.request.DeviceModelUpdateRequest;
 import com.eldercare.iot.dto.vo.DeviceModelVO;
@@ -98,7 +97,7 @@ public class DeviceModelServiceImpl implements IDeviceModelService {
 
         int rows = deviceModelMapper.updateById(entity);
         if (rows == 0) {
-            throw new BizException(SystemErrorCode.CONFLICT);
+            throw new BizException(IotErrorCode.DEVICE_MODEL_VERSION_CONFLICT);
         }
 
         return toVO(entity);

@@ -11,4 +11,8 @@ public class RemoteCallException extends RuntimeException {
     public RemoteCallException(Throwable cause) {
         super(SystemErrorCode.REMOTE_CALL_FAILED.getMsg(), cause);
     }
+
+    public RemoteCallException(String serviceName, String path, Throwable cause) {
+        super(SystemErrorCode.REMOTE_CALL_FAILED.getMsg() + " [service=" + serviceName + ", path=" + path + "]", cause);
+    }
 }

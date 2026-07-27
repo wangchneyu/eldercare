@@ -31,6 +31,14 @@ public class R<T> implements Serializable {
         return result(null, errorCode.getCode(), errorCode.getMsg());
     }
 
+    public static <T> R<T> fail(int code, String msg) {
+        return result(null, code, msg);
+    }
+
+    public static <T> R<T> fail(IErrorCode errorCode, T data) {
+        return result(data, errorCode.getCode(), errorCode.getMsg());
+    }
+
     private static <T> R<T> result(T data, int code, String msg) {
         R<T> result = new R<>();
         result.setCode(code);

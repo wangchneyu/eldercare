@@ -1,23 +1,34 @@
 server:
   port: 9999
+  shutdown: graceful
 
 spring:
   application:
     name: gateway
+  config:
+    import: optional:nacos:service-gateway.yaml
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
   cloud:
     nacos:
       discovery:
         server-addr: 127.0.0.1:8848
+      config:
+        server-addr: 127.0.0.1:8848
+        file-extension: yaml
     gateway:
       discovery:
         locator:
           enabled: false
+      httpclient:
+        connect-timeout: 3000
+        response-timeout: 10s
       routes:
-        # ==================== HTTP 路由 (5 组) ====================
+        # ==================== HTTP 路由 (8 组) ====================
 
-        # 鉴权服务 — 登录/注册/刷新 Token
+        # 鉴权服务 — 登录/注册/刷新 Token（由 operation-service 承载）
         - id: route-auth
-          uri: lb://service-auth
+          uri: lb://service-operation
           predicates:
             - Path=/auth/**
 
@@ -45,6 +56,24 @@ spring:
           predicates:
             - Path=/family/**
 
+        # 生命体征 — 体征数据查询/录入
+        - id: route-vital
+          uri: lb://service-vital
+          predicates:
+            - Path=/vital/**
+
+        # AI 推理 — 智能服务/ASR/TTS
+        - id: route-ai
+          uri: lb://service-ai
+          predicates:
+            - Path=/ai/**
+
+        # 告警服务 — SOS 预警/核销查询
+        - id: route-alert
+          uri: lb://service-alert
+          predicates:
+            - Path=/alert/**
+
         # ==================== WebSocket 路由 (2 组) ====================
 
         # 告警实时推送（SOS 状态变更）
@@ -61,21 +90,22 @@ spring:
 
     sentinel:
       transport:
-        dashboard: 127.0.0.1:8080
+        dashboard: 127.0.0.1:8858
       eager: true
 
 # ==================== 安全配置 ====================
 eldercare:
   security:
     enabled: true
-    secret: ElderCarePlatform2024SecretKey!@#$%^
+    secret: ${ELDERCARE_JWT_SECRET:ElderCarePlatform2024SecretKey!@#$%^}
     access-token-expiration: 7200
     refresh-token-expiration: 604800
 
     # CORS 跨域配置
     cors:
       allowed-origin-patterns:
-        - "*"  # 开发环境使用通配符，生产环境改为具体域名列表
+        - http://localhost:5173
+        - http://localhost:5174
       max-age: 3600
 
     # RBAC 角色-路径映射（用户需拥有所列角色之一方可访问匹配路径）
@@ -111,10 +141,47 @@ eldercare:
         roles:
           - ADMIN
           - FAMILY
-      # /ws/alert/** 不在此配置 → 所有已认证用户均可访问
+      # 告警实时推送 WebSocket
+      - paths:
+          - /ws/alert/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+          - OPERATOR
+          - FAMILY
+      # 生命体征 — 体征数据
+      - paths:
+          - /vital/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+          - DOCTOR
+      # AI 推理 — 智能服务
+      - paths:
+          - /ai/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+      # 告警服务 — SOS 预警/核销查询
+      - paths:
+          - /alert/**
+        roles:
+          - ADMIN
+          - CAREGIVER
+          - OPERATOR
 
 # ==================== 日志 ====================
 logging:
   level:
     com.eldercare.gateway: DEBUG
     com.alibaba.csp.sentinel: INFO
+
+# ==================== Actuator ====================
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never

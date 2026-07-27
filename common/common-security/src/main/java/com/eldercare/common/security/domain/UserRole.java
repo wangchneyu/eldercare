@@ -15,5 +15,8 @@ public enum UserRole {
     CAREGIVER,
 
     /** 运营人员 — 平台运营管理 */
-    OPERATOR
+    OPERATOR,
+
+    /** 医生 — 查看体征数据、健康评估 */
+    DOCTOR
 }
