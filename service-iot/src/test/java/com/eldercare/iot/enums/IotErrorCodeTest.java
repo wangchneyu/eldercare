@@ -44,8 +44,8 @@ class IotErrorCodeTest {
     }
 
     @Test
-    void total_count_is_13() {
-        assertEquals(13, IotErrorCode.values().length, "应该有 13 个错误码（212001-212013）");
+    void total_count_is_14() {
+        assertEquals(14, IotErrorCode.values().length, "应该有 14 个错误码（212001-212014）");
     }
 
     @Test

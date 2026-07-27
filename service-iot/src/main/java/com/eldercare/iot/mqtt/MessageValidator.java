@@ -12,7 +12,7 @@ import java.util.Set;
 public class MessageValidator {
 
     private static final int MAX_PAYLOAD_SIZE = 65536; // 64KB
-    private static final Set<String> VALID_MESSAGE_TYPES = Set.of("VITAL_SIGN", "SOS", "HEARTBEAT");
+    private static final Set<String> VALID_MESSAGE_TYPES = Set.of("VITAL_SIGN", "SOS", "FALL", "HEARTBEAT");
     private static final Set<String> REQUIRED_FIELDS = Set.of("messageId", "deviceId", "messageType", "protocolVersion", "occurredAt");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
