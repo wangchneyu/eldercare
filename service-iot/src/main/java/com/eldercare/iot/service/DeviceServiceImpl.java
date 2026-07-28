@@ -6,6 +6,8 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.eldercare.common.core.exception.BizException;
 import com.eldercare.common.core.utils.IdUtil;
+import com.eldercare.common.feign.dto.iot.DeviceBindingSnapshotRemoteDTO;
+import com.eldercare.common.feign.dto.iot.DeviceSnapshotRemoteDTO;
 import com.eldercare.iot.dto.request.DeviceLifecycleRequest;
 import com.eldercare.iot.dto.request.DeviceQuery;
 import com.eldercare.iot.dto.request.DeviceRegisterRequest;
@@ -274,6 +276,35 @@ public class DeviceServiceImpl implements IDeviceService {
         }).toList();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public DeviceSnapshotRemoteDTO getSnapshot(String deviceId) {
+        IotDeviceInstance instance = findByDeviceId(deviceId);
+        IotDeviceModel model = modelMapper.selectById(instance.getModelId());
+        Optional<HeartbeatState> currentState = heartbeatManager.getState(deviceId);
+
+        LambdaQueryWrapper<IotDeviceBinding> bindingQuery = new LambdaQueryWrapper<>();
+        bindingQuery.eq(IotDeviceBinding::getDeviceId, deviceId)
+                .eq(IotDeviceBinding::getStatus, "ACTIVE")
+                .orderByAsc(IotDeviceBinding::getBindingType);
+
+        DeviceSnapshotRemoteDTO snapshot = new DeviceSnapshotRemoteDTO();
+        snapshot.setDeviceId(instance.getDeviceId());
+        snapshot.setDeviceType(model == null ? null : model.getDeviceType());
+        snapshot.setLifecycleStatus(instance.getLifecycleStatus());
+        snapshot.setOnlineStatus(currentState
+                .map(state -> state.onlineStatus().getCode())
+                .orElse(instance.getOnlineStatus()));
+        snapshot.setLastHeartbeatAt(currentState
+                .map(HeartbeatState::lastHeartbeatAt)
+                .orElse(instance.getLastHeartbeatAt()));
+        snapshot.setSnapshotTime(OffsetDateTime.now());
+        snapshot.setBindings(bindingMapper.selectList(bindingQuery).stream()
+                .map(this::toRemoteBindingSnapshot)
+                .toList());
+        return snapshot;
+    }
+
     // ==================== Private helpers ====================
 
     /**
@@ -321,6 +352,23 @@ public class DeviceServiceImpl implements IDeviceService {
             vo.setDeviceType(model.getDeviceType());
         }
         return vo;
+    }
+
+    private DeviceBindingSnapshotRemoteDTO toRemoteBindingSnapshot(IotDeviceBinding binding) {
+        DeviceBindingSnapshotRemoteDTO snapshot = new DeviceBindingSnapshotRemoteDTO();
+        snapshot.setBindingId(binding.getBindingId());
+        snapshot.setBindingType(binding.getBindingType());
+        snapshot.setElderId(binding.getElderId() == null ? null : binding.getElderId().toString());
+        snapshot.setParkId(binding.getParkId());
+        snapshot.setBuildingId(binding.getBuildingId());
+        snapshot.setRoomId(binding.getRoomId());
+        snapshot.setRoomNo(binding.getRoomNo());
+        snapshot.setLocationId(binding.getLocationId());
+        snapshot.setLocationType(binding.getLocationType());
+        snapshot.setLocationName(binding.getLocationName());
+        snapshot.setFloorId(binding.getFloorId());
+        snapshot.setActiveFrom(binding.getActiveFrom());
+        return snapshot;
     }
 
     /**

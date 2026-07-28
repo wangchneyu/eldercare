@@ -1,6 +1,7 @@
 package com.eldercare.iot.service;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.eldercare.common.feign.dto.iot.DeviceSnapshotRemoteDTO;
 import com.eldercare.iot.dto.request.DeviceLifecycleRequest;
 import com.eldercare.iot.dto.request.DeviceQuery;
 import com.eldercare.iot.dto.request.DeviceRegisterRequest;
@@ -45,4 +46,9 @@ public interface IDeviceService {
      * 获取当前进程内记录的设备状态转换事件。
      */
     List<DeviceStatusEventVO> getStatusEvents(String deviceId);
+
+    /**
+     * 获取供内部 Feign 调用方使用的设备状态及当前绑定快照。
+     */
+    DeviceSnapshotRemoteDTO getSnapshot(String deviceId);
 }

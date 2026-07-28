@@ -13,6 +13,7 @@ import com.eldercare.iot.enums.IotErrorCode;
 import com.eldercare.iot.enums.LifecycleStatus;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
+import com.eldercare.iot.remote.CareClientCaller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -34,6 +35,7 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
 
     private final IotDeviceBindingMapper bindingMapper;
     private final IotDeviceInstanceMapper deviceMapper;
+    private final CareClientCaller careClientCaller;
 
     @Override
     public DeviceBindingVO bind(String deviceId, DeviceBindRequest request) {
@@ -65,9 +67,7 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
         newBinding.setBindingType(bindingType.getCode());
 
         if (bindingType == BindingType.ELDER) {
-            // Mock care-service 远程校验，当前阶段始终放行
-            log.info("Mock care-service validation passed for elderId={}, deviceId={}",
-                    request.getElderId(), deviceId);
+            careClientCaller.validateActiveElder(request.getElderId());
             newBinding.setElderId(request.getElderId());
             newBinding.setParkId(request.getParkId());
             newBinding.setBuildingId(request.getBuildingId());

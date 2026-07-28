@@ -25,7 +25,8 @@ public enum IotErrorCode implements IErrorCode {
     DEVICE_MODEL_NOT_FOUND(212011, "设备型号不存在", HttpStatus.NOT_FOUND),
     DEVICE_MODEL_CODE_DUPLICATE(212012, "设备型号编码已存在", HttpStatus.CONFLICT),
     DEVICE_MODEL_IN_USE(212013, "设备型号下存在设备实例，无法删除", HttpStatus.CONFLICT),
-    DEVICE_MODEL_VERSION_CONFLICT(212014, "设备型号已被其他操作修改，请刷新后重试", HttpStatus.CONFLICT);
+    DEVICE_MODEL_VERSION_CONFLICT(212014, "设备型号已被其他操作修改，请刷新后重试", HttpStatus.CONFLICT),
+    ELDER_NOT_FOUND(212015, "长者不存在或未处于有效状态", HttpStatus.NOT_FOUND);
 
     private final int code;
     private final String msg;

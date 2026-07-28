@@ -41,11 +41,19 @@ class IotErrorCodeTest {
 
         assertEquals(212010, IotErrorCode.DEVICE_MESSAGE_UNDELIVERABLE.getCode());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, IotErrorCode.DEVICE_MESSAGE_UNDELIVERABLE.getHttpStatus());
+
+        assertEquals(212015, IotErrorCode.ELDER_NOT_FOUND.getCode());
+        assertEquals("长者不存在或未处于有效状态", IotErrorCode.ELDER_NOT_FOUND.getMsg());
+        assertEquals(HttpStatus.NOT_FOUND, IotErrorCode.ELDER_NOT_FOUND.getHttpStatus());
     }
 
     @Test
-    void total_count_is_14() {
-        assertEquals(14, IotErrorCode.values().length, "应该有 14 个错误码（212001-212014）");
+    void error_codes_are_unique() {
+        long distinctCount = java.util.Arrays.stream(IotErrorCode.values())
+                .map(IotErrorCode::getCode)
+                .distinct()
+                .count();
+        assertEquals(IotErrorCode.values().length, distinctCount, "IoT 错误码不得重复");
     }
 
     @Test
