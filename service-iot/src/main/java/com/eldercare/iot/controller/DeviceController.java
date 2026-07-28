@@ -6,8 +6,11 @@ import com.eldercare.iot.dto.request.DeviceLifecycleRequest;
 import com.eldercare.iot.dto.request.DeviceQuery;
 import com.eldercare.iot.dto.request.DeviceRegisterRequest;
 import com.eldercare.iot.dto.vo.DeviceDetailVO;
+import com.eldercare.iot.dto.vo.DeviceStatusEventVO;
 import com.eldercare.iot.dto.vo.DeviceStatusVO;
 import com.eldercare.iot.dto.vo.DeviceVO;
+
+import java.util.List;
 import com.eldercare.iot.service.IDeviceService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -64,5 +67,13 @@ public class DeviceController {
     @GetMapping("/{deviceId}/status")
     public R<DeviceStatusVO> getStatus(@PathVariable String deviceId) {
         return R.ok(deviceService.getStatus(deviceId));
+    }
+
+    /**
+     * 获取当前进程内记录的设备在线状态事件。
+     */
+    @GetMapping("/{deviceId}/status-events")
+    public R<List<DeviceStatusEventVO>> getStatusEvents(@PathVariable String deviceId) {
+        return R.ok(deviceService.getStatusEvents(deviceId));
     }
 }

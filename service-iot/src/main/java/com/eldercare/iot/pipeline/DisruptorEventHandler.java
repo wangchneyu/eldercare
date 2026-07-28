@@ -115,7 +115,7 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         ParsedEvent enriched = enrich(parsed, snapshot);
 
         // ⑤ 路由到下游
-        messagePipeline.handle(enriched, raw);
+        messagePipeline.handle(enriched, raw, model.getHeartbeatTimeoutSeconds());
 
         // ⑥ 非 P0 消息在成功路由后即可 ack；P0 由 OutboxService 在事务提交后 ack
         if (!(enriched instanceof ParsedSosEvent) && raw.requiresAck()) {

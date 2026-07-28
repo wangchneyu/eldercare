@@ -11,12 +11,15 @@ import com.eldercare.iot.dto.request.DeviceQuery;
 import com.eldercare.iot.dto.request.DeviceRegisterRequest;
 import com.eldercare.iot.dto.vo.DeviceBindingVO;
 import com.eldercare.iot.dto.vo.DeviceDetailVO;
+import com.eldercare.iot.dto.vo.DeviceStatusEventVO;
 import com.eldercare.iot.dto.vo.DeviceStatusVO;
 import com.eldercare.iot.dto.vo.DeviceVO;
 import com.eldercare.iot.entity.IotDeviceBinding;
 import com.eldercare.iot.entity.IotDeviceInstance;
 import com.eldercare.iot.entity.IotDeviceModel;
 import com.eldercare.iot.enums.IotErrorCode;
+import com.eldercare.iot.heartbeat.HeartbeatManager;
+import com.eldercare.iot.heartbeat.HeartbeatState;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
@@ -40,6 +43,7 @@ public class DeviceServiceImpl implements IDeviceService {
     private final IotDeviceInstanceMapper instanceMapper;
     private final IotDeviceModelMapper modelMapper;
     private final IotDeviceBindingMapper bindingMapper;
+    private final HeartbeatManager heartbeatManager;
 
     // ==================== register ====================
 
@@ -248,12 +252,26 @@ public class DeviceServiceImpl implements IDeviceService {
     public DeviceStatusVO getStatus(String deviceId) {
         IotDeviceInstance instance = findByDeviceId(deviceId);
 
+        Optional<HeartbeatState> currentState = heartbeatManager.getState(deviceId);
         DeviceStatusVO vo = new DeviceStatusVO();
         vo.setDeviceId(instance.getDeviceId());
-        vo.setOnlineStatus(instance.getOnlineStatus());
-        vo.setLastHeartbeat(instance.getLastHeartbeatAt());
+        vo.setOnlineStatus(currentState.map(state -> state.onlineStatus().getCode()).orElse(instance.getOnlineStatus()));
+        vo.setLastHeartbeat(currentState.map(HeartbeatState::lastHeartbeatAt).orElse(instance.getLastHeartbeatAt()));
         vo.setSnapshotTime(OffsetDateTime.now());
         return vo;
+    }
+
+    @Override
+    public List<DeviceStatusEventVO> getStatusEvents(String deviceId) {
+        findByDeviceId(deviceId);
+        return heartbeatManager.recentEvents(deviceId).stream().map(event -> {
+            DeviceStatusEventVO vo = new DeviceStatusEventVO();
+            vo.setEventType(event.eventType());
+            vo.setOldStatus(event.oldStatus().getCode());
+            vo.setNewStatus(event.newStatus().getCode());
+            vo.setOccurredAt(event.occurredAt());
+            return vo;
+        }).toList();
     }
 
     // ==================== Private helpers ====================

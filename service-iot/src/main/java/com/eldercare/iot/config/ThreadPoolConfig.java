@@ -1,7 +1,6 @@
 package com.eldercare.iot.config;
 
 import com.eldercare.iot.metrics.IotMetrics;
-import jakarta.annotation.PreDestroy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -50,7 +49,7 @@ public class ThreadPoolConfig {
         return executor;
     }
 
-    @Bean(name = "iotRetryScheduler")
+    @Bean(name = {"iotRetryScheduler", "taskScheduler"}, destroyMethod = "shutdownNow")
     public ScheduledExecutorService iotRetryScheduler() {
         return Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "iot-retry-1");
@@ -59,19 +58,25 @@ public class ThreadPoolConfig {
         });
     }
 
-    @Bean(name = "iotVitalFlushScheduler")
+    @Bean(name = "iotVitalFlushScheduler", destroyMethod = "shutdownNow")
     public ScheduledExecutorService iotVitalFlushScheduler() {
-        return Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "iot-mq-flush-1");
-            t.setDaemon(true);
-            return t;
-        });
+        return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-mq-flush-1"));
     }
 
-    @PreDestroy
-    public void shutdown() {
-        iotRetryScheduler().shutdownNow();
-        iotVitalFlushScheduler().shutdownNow();
+    @Bean(name = "iotHeartbeatScanScheduler", destroyMethod = "shutdownNow")
+    public ScheduledExecutorService iotHeartbeatScanScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-heartbeat-scan-1"));
+    }
+
+    @Bean(name = "iotHeartbeatFlushScheduler", destroyMethod = "shutdownNow")
+    public ScheduledExecutorService iotHeartbeatFlushScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-heartbeat-flush-1"));
+    }
+
+    private static Thread daemonThread(Runnable runnable, String name) {
+        Thread thread = new Thread(runnable, name);
+        thread.setDaemon(true);
+        return thread;
     }
 
     /**

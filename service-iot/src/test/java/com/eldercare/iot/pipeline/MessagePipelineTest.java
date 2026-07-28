@@ -1,6 +1,8 @@
 package com.eldercare.iot.pipeline;
 
 import com.eldercare.common.core.utils.TraceContext;
+import com.eldercare.iot.heartbeat.HeartbeatFlushTask;
+import com.eldercare.iot.heartbeat.HeartbeatManager;
 import com.eldercare.iot.mq.OutboxService;
 import com.eldercare.iot.mqtt.InboundMqttMessage;
 import com.eldercare.iot.parser.model.ParsedHeartbeat;
@@ -33,6 +35,10 @@ class MessagePipelineTest {
     @Mock
     OutboxService outboxService;
     @Mock
+    HeartbeatManager heartbeatManager;
+    @Mock
+    HeartbeatFlushTask heartbeatFlushTask;
+    @Mock
     Executor iotP0Executor;
 
     @InjectMocks
@@ -40,15 +46,16 @@ class MessagePipelineTest {
 
     @Test
     void nullEvent_isIgnored() {
-        pipeline.handle(null, null);
-        verifyNoInteractions(vitalSignBatchAggregator, outboxService, iotP0Executor);
+        pipeline.handle(null, null, null);
+        verifyNoInteractions(vitalSignBatchAggregator, outboxService, heartbeatManager, heartbeatFlushTask, iotP0Executor);
     }
 
     @Test
     void vitalSign_routesToAggregator() {
         ParsedVitalSign vs = vitalSign();
-        pipeline.handle(vs, null);
+        pipeline.handle(vs, null, 30);
         verify(vitalSignBatchAggregator).submit(vs);
+        verify(heartbeatManager).recordHeartbeat(vs, 30);
         verifyNoInteractions(outboxService);
     }
 
@@ -64,7 +71,7 @@ class MessagePipelineTest {
             return null;
         }).when(outboxService).handleSosEvent(any(ParsedSosEvent.class), any());
 
-        pipeline.handle(sos, null);
+        pipeline.handle(sos, null, 30);
 
         verify(iotP0Executor).execute(any(Runnable.class));
         verify(outboxService).handleSosEvent(sos, null);
@@ -78,16 +85,18 @@ class MessagePipelineTest {
             return null;
         }).when(iotP0Executor).execute(any(Runnable.class));
 
-        pipeline.handle(fall, null);
+        pipeline.handle(fall, null, 30);
 
         verify(outboxService).handleSosEvent(fall, null);
     }
 
     @Test
-    void heartbeat_isLoggedNotRouted() {
+    void heartbeat_updatesStateWithoutExternalRoute() {
         ParsedHeartbeat hb = new ParsedHeartbeat(
                 "EVT", "msg", "DEV", OffsetDateTime.now(), "trace", "P001", "RADAR");
-        pipeline.handle(hb, null);
+        pipeline.handle(hb, null, 30);
+        verify(heartbeatManager).recordHeartbeat(hb, 30);
+        verify(heartbeatFlushTask).requestFlushIfBatchReady();
         verifyNoInteractions(vitalSignBatchAggregator, outboxService);
     }
 
@@ -95,7 +104,7 @@ class MessagePipelineTest {
     void p0ExecutorRejection_leavesMessageForMqttRedelivery() {
         doThrow(new RejectedExecutionException("full")).when(iotP0Executor).execute(any(Runnable.class));
 
-        assertDoesNotThrow(() -> pipeline.handle(sosEvent("SOS_TRIGGERED"), null));
+        assertDoesNotThrow(() -> pipeline.handle(sosEvent("SOS_TRIGGERED"), null, 30));
         verifyNoInteractions(outboxService);
     }
 

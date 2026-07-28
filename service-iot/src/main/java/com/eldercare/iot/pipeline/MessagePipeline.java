@@ -1,6 +1,8 @@
 package com.eldercare.iot.pipeline;
 
 import com.eldercare.common.core.utils.TraceContext;
+import com.eldercare.iot.heartbeat.HeartbeatFlushTask;
+import com.eldercare.iot.heartbeat.HeartbeatManager;
 import com.eldercare.iot.mq.OutboxService;
 import com.eldercare.iot.parser.model.ParsedEvent;
 import com.eldercare.iot.parser.model.ParsedHeartbeat;
@@ -28,12 +30,16 @@ public class MessagePipeline {
 
     private final VitalSignBatchAggregator vitalSignBatchAggregator;
     private final OutboxService outboxService;
+    private final HeartbeatManager heartbeatManager;
+    private final HeartbeatFlushTask heartbeatFlushTask;
     private final Executor iotP0Executor;
 
-    public void handle(ParsedEvent event, RawDeviceMessage raw) {
+    public void handle(ParsedEvent event, RawDeviceMessage raw, Integer heartbeatTimeoutSeconds) {
         if (event == null) {
             return;
         }
+        heartbeatManager.recordHeartbeat(event, heartbeatTimeoutSeconds);
+        heartbeatFlushTask.requestFlushIfBatchReady();
         String traceId = event.traceId();
         if (event instanceof ParsedVitalSign) {
             vitalSignBatchAggregator.submit((ParsedVitalSign) event);
@@ -53,8 +59,7 @@ public class MessagePipeline {
                         event.eventId(), traceId);
             }
         } else if (event instanceof ParsedHeartbeat) {
-            // Phase 6 心跳管理器接入点
-            log.debug("心跳消息暂存: deviceId={}", ((ParsedHeartbeat) event).deviceId());
+            // 心跳状态已在合法事件统一入口更新，无需额外下游动作。
         } else {
             log.warn("未知事件类型: {}", event.getClass().getSimpleName());
         }

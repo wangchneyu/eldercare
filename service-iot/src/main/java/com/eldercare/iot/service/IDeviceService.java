@@ -5,8 +5,11 @@ import com.eldercare.iot.dto.request.DeviceLifecycleRequest;
 import com.eldercare.iot.dto.request.DeviceQuery;
 import com.eldercare.iot.dto.request.DeviceRegisterRequest;
 import com.eldercare.iot.dto.vo.DeviceDetailVO;
+import com.eldercare.iot.dto.vo.DeviceStatusEventVO;
 import com.eldercare.iot.dto.vo.DeviceStatusVO;
 import com.eldercare.iot.dto.vo.DeviceVO;
+
+import java.util.List;
 
 /**
  * 设备实例服务接口
@@ -37,4 +40,9 @@ public interface IDeviceService {
      * 获取设备在线状态快照
      */
     DeviceStatusVO getStatus(String deviceId);
+
+    /**
+     * 获取当前进程内记录的设备状态转换事件。
+     */
+    List<DeviceStatusEventVO> getStatusEvents(String deviceId);
 }

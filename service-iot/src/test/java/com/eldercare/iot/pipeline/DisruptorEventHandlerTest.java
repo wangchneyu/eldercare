@@ -76,7 +76,7 @@ class DisruptorEventHandlerTest {
 
         handler.onEvent(wrap(raw), 0, false);
 
-        verify(messagePipeline, never()).handle(any(), any());
+        verify(messagePipeline, never()).handle(any(), any(), any());
         assertEquals(1, acknowledgements.get());
         verify(metrics).mqttMessageRejected("unknown_device");
     }
@@ -91,7 +91,7 @@ class DisruptorEventHandlerTest {
 
         handler.onEvent(wrap(raw), 0, false);
 
-        verify(messagePipeline, never()).handle(any(), any());
+        verify(messagePipeline, never()).handle(any(), any(), any());
     }
 
     @Test
@@ -106,7 +106,7 @@ class DisruptorEventHandlerTest {
         handler.onEvent(wrap(raw), 0, false);
 
         verify(parser, never()).parse(any());
-        verify(messagePipeline, never()).handle(any(), any());
+        verify(messagePipeline, never()).handle(any(), any(), any());
     }
 
     @Test
@@ -120,7 +120,7 @@ class DisruptorEventHandlerTest {
         handler.onEvent(wrap(raw), 0, false);
 
         verify(parser, times(1)).parse(raw);
-        verify(messagePipeline, never()).handle(any(), any());
+        verify(messagePipeline, never()).handle(any(), any(), any());
     }
 
     @Test
@@ -139,7 +139,7 @@ class DisruptorEventHandlerTest {
 
         verify(parser, times(1)).parse(raw);
         ArgumentCaptor<ParsedEvent> captor = ArgumentCaptor.forClass(ParsedEvent.class);
-        verify(messagePipeline).handle(captor.capture(), eq(raw));
+        verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
         ParsedVitalSign enriched = (ParsedVitalSign) captor.getValue();
         assertEquals(123L, enriched.elderId());
     }
@@ -160,7 +160,7 @@ class DisruptorEventHandlerTest {
         handler.onEvent(wrap(raw), 0, false);
 
         ArgumentCaptor<ParsedEvent> captor = ArgumentCaptor.forClass(ParsedEvent.class);
-        verify(messagePipeline).handle(captor.capture(), eq(raw));
+        verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
         ParsedSosEvent enriched = (ParsedSosEvent) captor.getValue();
         assertEquals("BIND-LOC", enriched.locationBindingId());
         assertEquals("LOC-001", enriched.location().get("locationId"));
@@ -182,7 +182,7 @@ class DisruptorEventHandlerTest {
         handler.onEvent(wrap(raw), 0, false);
 
         ArgumentCaptor<ParsedEvent> captor = ArgumentCaptor.forClass(ParsedEvent.class);
-        verify(messagePipeline).handle(captor.capture(), eq(raw));
+        verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
         ParsedSosEvent enriched = (ParsedSosEvent) captor.getValue();
         assertEquals("FALL_DETECTED", enriched.eventType());
         assertEquals(123L, enriched.elderId());
@@ -204,7 +204,7 @@ class DisruptorEventHandlerTest {
         handler.onEvent(wrap(raw), 0, false);
 
         ArgumentCaptor<ParsedEvent> captor = ArgumentCaptor.forClass(ParsedEvent.class);
-        verify(messagePipeline).handle(captor.capture(), eq(raw));
+        verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
         ParsedVitalSign enriched = (ParsedVitalSign) captor.getValue();
         assertNull(enriched.elderId());
     }
