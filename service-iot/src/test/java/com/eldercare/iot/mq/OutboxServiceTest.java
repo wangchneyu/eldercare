@@ -7,6 +7,7 @@ import com.eldercare.iot.mapper.IotMqOutboxMapper;
 import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
 import com.eldercare.iot.mqtt.InboundMqttMessage;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -123,6 +124,28 @@ class OutboxServiceTest {
         } finally {
             TraceContext.clear();
         }
+    }
+
+    @Test
+    void unboundSos_serializesExplicitNullElderIdDespiteRestNonNullSetting() throws Exception {
+        stubTransactionManager();
+        ObjectMapper restObjectMapper = new ObjectMapper()
+                .setSerializationInclusion(JsonInclude.Include.NON_NULL);
+        OutboxService service = new OutboxService(
+                outboxMapper, sosEventProducer, transactionManager, metrics, restObjectMapper);
+        ParsedSosEvent event = new ParsedSosEvent(
+                "EVT-UNBOUND", "msg-unbound", "DEV-UNBOUND", OffsetDateTime.now(), "trace-unbound", "P001",
+                "SOS_BUTTON", "SOS_TRIGGERED", null, null, null, null, null, null, null,
+                "BUTTON_PRESS", 85, null);
+        when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(1);
+
+        service.handleSosEvent(event);
+
+        ArgumentCaptor<IotMqOutbox> captor = ArgumentCaptor.forClass(IotMqOutbox.class);
+        verify(outboxMapper).insertOnConflict(captor.capture());
+        var payload = restObjectMapper.readTree(captor.getValue().getRawEnvelopeJson()).path("payload");
+        assertTrue(payload.has("elderId"));
+        assertTrue(payload.path("elderId").isNull());
     }
 
     @Test

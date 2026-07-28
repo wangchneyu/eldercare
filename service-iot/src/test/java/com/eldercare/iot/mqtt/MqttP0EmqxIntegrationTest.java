@@ -2,9 +2,13 @@ package com.eldercare.iot.mqtt;
 
 import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.eldercare.iot.IntegrationTestConfig;
+import com.eldercare.iot.entity.IotDeviceBinding;
 import com.eldercare.iot.entity.IotDeviceInstance;
 import com.eldercare.iot.entity.IotDeviceModel;
 import com.eldercare.iot.entity.IotMqOutbox;
+import com.eldercare.iot.enums.BindingStatus;
+import com.eldercare.iot.enums.BindingType;
+import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
 import com.eldercare.iot.mapper.IotMqOutboxMapper;
@@ -35,7 +39,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.function.BooleanSupplier;
@@ -68,6 +74,8 @@ class MqttP0EmqxIntegrationTest {
     @Autowired
     private IotDeviceInstanceMapper instanceMapper;
     @Autowired
+    private IotDeviceBindingMapper bindingMapper;
+    @Autowired
     private IotMqOutboxMapper outboxMapper;
     @Autowired
     private RocketMQTemplate rocketMQTemplate;
@@ -81,11 +89,20 @@ class MqttP0EmqxIntegrationTest {
     private Long modelId;
     private Long instanceId;
     private Long outboxId;
+    private String createdDeviceId;
+    private final List<Long> additionalOutboxIds = new ArrayList<>();
 
     @AfterEach
     void cleanUp() {
+        for (Long additionalOutboxId : additionalOutboxIds) {
+            outboxMapper.deleteById(additionalOutboxId);
+        }
         if (outboxId != null) {
             outboxMapper.deleteById(outboxId);
+        }
+        if (createdDeviceId != null) {
+            bindingMapper.delete(new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<IotDeviceBinding>()
+                    .eq(IotDeviceBinding::getDeviceId, createdDeviceId));
         }
         if (instanceId != null) {
             instanceMapper.deleteById(instanceId);
@@ -127,6 +144,83 @@ class MqttP0EmqxIntegrationTest {
     }
 
     @Test
+    void qos1DuplicateSos_createsOnlyOneOutboxRecord() throws Exception {
+        await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
+        stubRocketMqSuccess();
+
+        String deviceId = "DEDUP-" + UUID.randomUUID();
+        String messageId = "MSG-" + UUID.randomUUID();
+        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+        double acknowledgementsBefore = ackCount();
+
+        publishQos1(deviceId, messageId);
+        IotMqOutbox outbox = awaitOutbox(deviceId, messageId);
+        outboxId = outbox.getId();
+        await(() -> "SENT".equals(outboxMapper.selectById(outboxId).getStatus()), 10_000,
+                "first P0 Outbox was not marked SENT after mocked RocketMQ confirmation");
+
+        publishQos1(deviceId, messageId);
+        await(() -> ackCount() == acknowledgementsBefore + 2, 10_000,
+                "duplicate QoS1 SOS was not acknowledged after deduplication");
+
+        long outboxCount = outboxMapper.selectCount(
+                new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<IotMqOutbox>()
+                        .eq(IotMqOutbox::getDeviceId, deviceId)
+                        .eq(IotMqOutbox::getSourceMessageId, messageId)
+                        .eq(IotMqOutbox::getEventType, "SOS_TRIGGERED")
+        );
+        assertEquals(1, outboxCount, "duplicate SOS must not create a second Outbox record");
+    }
+
+    @Test
+    void qos1UnboundSos_isPersistedWithExplicitNullElderId() throws Exception {
+        await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
+        stubRocketMqSuccess();
+
+        String deviceId = "UNBOUND-" + UUID.randomUUID();
+        String messageId = "MSG-" + UUID.randomUUID();
+        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+
+        publishQos1(deviceId, messageId);
+
+        IotMqOutbox outbox = awaitOutbox(deviceId, messageId);
+        outboxId = outbox.getId();
+        JsonNode envelope = objectMapper.readTree(outbox.getRawEnvelopeJson());
+        assertTrue(envelope.path("payload").has("elderId"));
+        assertTrue(envelope.path("payload").path("elderId").isNull(),
+                "unbound SOS must keep elderId as an explicit null instead of being dropped");
+    }
+
+    @Test
+    void qos1Sos_preservesOriginalLocationSnapshotAfterRebind() throws Exception {
+        await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
+        stubRocketMqSuccess();
+
+        String deviceId = "SNAPSHOT-" + UUID.randomUUID();
+        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+        IotDeviceBinding oldBinding = createLocationBinding(deviceId, "LOC-OLD", "旧活动区");
+
+        String beforeRebindMessageId = "MSG-" + UUID.randomUUID();
+        publishQos1(deviceId, beforeRebindMessageId);
+        IotMqOutbox beforeRebind = awaitOutbox(deviceId, beforeRebindMessageId);
+        outboxId = beforeRebind.getId();
+        assertLocationSnapshot(beforeRebind, oldBinding.getBindingId(), "LOC-OLD");
+
+        oldBinding.setStatus(BindingStatus.INACTIVE.getCode());
+        oldBinding.setInactiveAt(OffsetDateTime.now());
+        assertEquals(1, bindingMapper.updateById(oldBinding));
+        IotDeviceBinding newBinding = createLocationBinding(deviceId, "LOC-NEW", "新康复区");
+
+        String afterRebindMessageId = "MSG-" + UUID.randomUUID();
+        publishQos1(deviceId, afterRebindMessageId);
+        IotMqOutbox afterRebind = awaitOutbox(deviceId, afterRebindMessageId);
+        additionalOutboxIds.add(afterRebind.getId());
+        assertLocationSnapshot(afterRebind, newBinding.getBindingId(), "LOC-NEW");
+
+        assertLocationSnapshot(outboxMapper.selectById(beforeRebind.getId()), oldBinding.getBindingId(), "LOC-OLD");
+    }
+
+    @Test
     void qos1Heartbeat_updatesStatusEndpoint_timesOut_andRecovers() throws Exception {
         await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
 
@@ -148,6 +242,7 @@ class MqttP0EmqxIntegrationTest {
     }
 
     private void createActiveSimulatorDevice(String deviceId, String deviceType, int heartbeatTimeoutSeconds) {
+        createdDeviceId = deviceId;
         modelId = IdWorker.getId();
         IotDeviceModel model = new IotDeviceModel();
         model.setId(modelId);
@@ -172,6 +267,30 @@ class MqttP0EmqxIntegrationTest {
         instance.setOnlineStatus("UNKNOWN");
         instance.setCreatedAt(OffsetDateTime.now());
         assertEquals(1, instanceMapper.insert(instance));
+    }
+
+    private IotDeviceBinding createLocationBinding(String deviceId, String locationId, String locationName) {
+        IotDeviceBinding binding = new IotDeviceBinding();
+        binding.setId(IdWorker.getId());
+        binding.setBindingId("BIND-" + UUID.randomUUID());
+        binding.setDeviceId(deviceId);
+        binding.setBindingType(BindingType.LOCATION.getCode());
+        binding.setLocationId(locationId);
+        binding.setLocationType("PUBLIC_AREA");
+        binding.setLocationName(locationName);
+        binding.setFloorId("F03");
+        binding.setStatus(BindingStatus.ACTIVE.getCode());
+        binding.setActiveFrom(OffsetDateTime.now());
+        binding.setCreatedAt(OffsetDateTime.now());
+        assertEquals(1, bindingMapper.insert(binding));
+        return binding;
+    }
+
+    private void assertLocationSnapshot(IotMqOutbox outbox, String expectedBindingId, String expectedLocationId)
+            throws Exception {
+        JsonNode payload = objectMapper.readTree(outbox.getRawEnvelopeJson()).path("payload");
+        assertEquals(expectedBindingId, payload.path("locationBindingId").asText());
+        assertEquals(expectedLocationId, payload.path("location").path("locationId").asText());
     }
 
     private void publishQos1(String deviceId, String messageId) throws Exception {

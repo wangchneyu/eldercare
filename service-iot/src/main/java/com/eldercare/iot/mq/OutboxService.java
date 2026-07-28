@@ -8,6 +8,7 @@ import com.eldercare.iot.mapper.IotMqOutboxMapper;
 import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.mqtt.InboundMqttMessage;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -180,7 +181,11 @@ public class OutboxService {
 
     private String serializeRawEnvelope(Map<String, Object> rawEnvelope) {
         try {
-            return objectMapper.writeValueAsString(rawEnvelope);
+            // C05 needs explicit nulls (for example, an unbound SOS has elderId=null).
+            // Keep this contract independent from the application's REST NON_NULL setting.
+            return objectMapper.copy()
+                    .setSerializationInclusion(JsonInclude.Include.ALWAYS)
+                    .writeValueAsString(rawEnvelope);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("Unable to serialize C05 raw envelope", e);
         }

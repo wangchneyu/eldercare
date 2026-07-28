@@ -21,6 +21,8 @@ import org.springframework.test.web.reactive.server.WebTestClient;
 import java.time.OffsetDateTime;
 
 import static com.eldercare.iot.support.WebTestClientMvcAdapter.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
 /**
  * 阶段三验证 — 设备管理 CRUD 全流程 API 测试
@@ -342,11 +344,37 @@ class DeviceCrudApiTest {
 
     @Test
     @Order(22)
-    void binding_history() throws Exception {
-        mockMvc.perform(get("/api/iot/devices/{deviceId}/bindings", bindTestDeviceId))
+    void rebind_keepsInactiveHistoryAndCreatesNewActiveBinding() throws Exception {
+        DeviceBindRequest req = new DeviceBindRequest();
+        req.setBindingType("LOCATION");
+        req.setLocationId("LOC-002");
+        req.setLocationType("PUBLIC_AREA");
+        req.setLocationName("三楼康复区");
+        req.setParkId("P001");
+        req.setBuildingId("B001");
+        req.setFloorId("F03");
+
+        mockMvc.perform(post("/api/iot/devices/{deviceId}/bindings", bindTestDeviceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.code").value(0))
+            .andExpect(jsonPath("$.data.locationId").value("LOC-002"))
+            .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+
+        MvcResult historyResult = mockMvc.perform(get("/api/iot/devices/{deviceId}/bindings", bindTestDeviceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
-            .andExpect(jsonPath("$.data").isArray());
+            .andExpect(jsonPath("$.data").isArray())
+            .andReturn();
+
+        var bindings = objectMapper.readTree(historyResult.getResponse().getContentAsString()).path("data");
+        assertEquals(2, bindings.size());
+        assertEquals("LOC-002", bindings.get(0).path("locationId").asText());
+        assertEquals("ACTIVE", bindings.get(0).path("status").asText());
+        assertEquals("LOC-001", bindings.get(1).path("locationId").asText());
+        assertEquals("INACTIVE", bindings.get(1).path("status").asText());
+        assertFalse(bindings.get(1).path("inactiveAt").isMissingNode());
     }
 
     @Test
