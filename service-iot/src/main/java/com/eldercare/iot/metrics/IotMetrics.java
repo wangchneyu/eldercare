@@ -44,6 +44,10 @@ public class IotMetrics {
         counter("iot_mqtt_acks_total", "status", "failed", "reason", reason).increment();
     }
 
+    public void mqttMessageProcessingFailed(String stage) {
+        counter("iot_mqtt_messages_total", "status", "failed", "stage", stage).increment();
+    }
+
     // ───────────────────────── Disruptor / Executor 背压 ─────────────────────────
 
     public void ringBufferRejected() {

@@ -6,11 +6,14 @@ import com.eldercare.iot.enums.OutboxStatus;
 import com.eldercare.iot.mapper.IotMqOutboxMapper;
 import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
+import com.eldercare.iot.mqtt.InboundMqttMessage;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
@@ -19,6 +22,7 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.time.OffsetDateTime;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -38,6 +42,8 @@ class OutboxServiceTest {
     PlatformTransactionManager transactionManager;
     @Mock
     IotMetrics metrics;
+    @Spy
+    ObjectMapper objectMapper = new ObjectMapper();
 
     @InjectMocks
     OutboxService outboxService;
@@ -64,6 +70,20 @@ class OutboxServiceTest {
 
         verify(sosEventProducer, never()).send(any());
         verify(metrics).outboxDuplicate("SOS_TRIGGERED");
+    }
+
+    @Test
+    void duplicateEvent_isAcknowledgedAfterExistingOutboxIsConfirmed() {
+        stubTransactionManager();
+        when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(0);
+        AtomicInteger acknowledgements = new AtomicInteger();
+        InboundMqttMessage inbound = new InboundMqttMessage("topic", null, 1, 1,
+                message -> acknowledgements.incrementAndGet());
+
+        outboxService.handleSosEvent(sosEvent("SOS_TRIGGERED"), inbound);
+
+        assertEquals(1, acknowledgements.get());
+        verify(sosEventProducer, never()).send(any());
     }
 
     @Test
@@ -95,6 +115,7 @@ class OutboxServiceTest {
             verify(outboxMapper).insertOnConflict(captor.capture());
             IotMqOutbox outbox = captor.getValue();
             assertNotNull(outbox.getRawEnvelope());
+            assertNotNull(outbox.getRawEnvelopeJson());
             assertEquals("trace-retry", outbox.getRawEnvelope().get("traceId"));
             // C05 元数据字段只在信封顶层，payload 中不再冗余
             assertFalse(outbox.getPayload().containsKey("traceId"));

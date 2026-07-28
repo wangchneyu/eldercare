@@ -9,6 +9,7 @@ import com.eldercare.iot.enums.LifecycleStatus;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
+import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.DeviceMessageParser;
 import com.eldercare.iot.parser.ParserRegistry;
 import com.eldercare.iot.parser.model.ParsedEvent;
@@ -39,6 +40,7 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
     private final IotDeviceBindingMapper bindingMapper;
     private final ParserRegistry parserRegistry;
     private final MessagePipeline messagePipeline;
+    private final IotMetrics metrics;
 
     @Override
     public void onEvent(IotEvent event, long sequence, boolean endOfBatch) {
@@ -49,6 +51,11 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         try {
             TraceContext.setTraceId(raw.traceId());
             process(raw);
+        } catch (Exception e) {
+            // Keep the MQTT ack for broker redelivery and keep the consumer thread alive.
+            metrics.mqttMessageProcessingFailed("disruptor_handler");
+            log.error("Disruptor processing failed; awaiting MQTT redelivery: eventId={}, traceId={}",
+                    raw.eventId(), raw.traceId(), e);
         } finally {
             TraceContext.clear();
             event.clear();
@@ -63,11 +70,13 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         );
         if (instance == null) {
             log.warn("设备不存在，丢弃消息: deviceId={}, traceId={}", raw.deviceId(), raw.traceId());
+            rejectAndAck(raw, "unknown_device");
             return;
         }
         if (!LifecycleStatus.ACTIVE.getCode().equals(instance.getLifecycleStatus())) {
             log.warn("设备未启用，丢弃消息: deviceId={}, status={}, traceId={}",
                     raw.deviceId(), instance.getLifecycleStatus(), raw.traceId());
+            rejectAndAck(raw, "inactive_device");
             return;
         }
 
@@ -75,11 +84,13 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         IotDeviceModel model = modelMapper.selectById(instance.getModelId());
         if (model == null) {
             log.warn("设备型号不存在: deviceId={}, modelId={}", raw.deviceId(), instance.getModelId());
+            rejectAndAck(raw, "unknown_model");
             return;
         }
         DeviceMessageParser parser = parserRegistry.getParser(model.getParserCode()).orElse(null);
         if (parser == null) {
             log.warn("解析器不存在: parserCode={}", model.getParserCode());
+            rejectAndAck(raw, "unknown_parser");
             return;
         }
         String protocolVersion = raw.envelope().has("protocolVersion")
@@ -87,6 +98,7 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
                 : null;
         if (!parser.supportsProtocolVersion(protocolVersion)) {
             log.warn("协议版本不受支持: parserCode={}, protocolVersion={}", model.getParserCode(), protocolVersion);
+            rejectAndAck(raw, "unsupported_protocol");
             return;
         }
 
@@ -94,6 +106,7 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         ParsedEvent parsed = parser.parse(raw).orElse(null);
         if (parsed == null) {
             log.warn("Payload 解析失败: deviceId={}, messageType={}", raw.deviceId(), raw.messageType());
+            rejectAndAck(raw, "parse_failed");
             return;
         }
 
@@ -166,5 +179,13 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
             );
         }
         return parsed;
+    }
+
+    private void rejectAndAck(RawDeviceMessage raw, String reason) {
+        metrics.mqttMessageRejected(reason);
+        if (raw.requiresAck()) {
+            raw.ackMqtt();
+            metrics.mqttMessageAcked(String.valueOf(raw.mqttQos()));
+        }
     }
 }

@@ -84,6 +84,7 @@ class OutboxServiceIntegrationTest {
         );
         assertNotNull(outbox);
         assertNotNull(outbox.getRawEnvelope());
+        assertNotNull(outbox.getRawEnvelopeJson());
 
         // 补发：同一 Outbox 记录直接交给生产者
         sosEventProducer.send(outbox);
@@ -94,7 +95,8 @@ class OutboxServiceIntegrationTest {
         String firstJson = captor.getAllValues().get(0).getPayload();
         String secondJson = captor.getAllValues().get(1).getPayload();
 
-        assertEquals(objectMapper.readTree(firstJson), objectMapper.readTree(secondJson));
+        assertEquals(firstJson, secondJson);
+        assertEquals(outbox.getRawEnvelopeJson(), firstJson);
 
         outboxMapper.deleteById(outbox.getId());
     }

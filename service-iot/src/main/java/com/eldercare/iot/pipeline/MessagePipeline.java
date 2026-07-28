@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * 消息处理管线入口：按事件类型路由到下游。
@@ -37,14 +38,20 @@ public class MessagePipeline {
         if (event instanceof ParsedVitalSign) {
             vitalSignBatchAggregator.submit((ParsedVitalSign) event);
         } else if (event instanceof ParsedSosEvent sos) {
-            iotP0Executor.execute(() -> {
-                try {
-                    TraceContext.setTraceId(traceId);
-                    outboxService.handleSosEvent(sos, raw != null ? raw.inboundMqttMessage() : null);
-                } finally {
-                    TraceContext.clear();
-                }
-            });
+            try {
+                iotP0Executor.execute(() -> {
+                    try {
+                        TraceContext.setTraceId(traceId);
+                        outboxService.handleSosEvent(sos, raw != null ? raw.inboundMqttMessage() : null);
+                    } finally {
+                        TraceContext.clear();
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                // Do not acknowledge P0. MQTT redelivery will re-enter the Outbox transaction.
+                log.warn("P0 executor is full; waiting for MQTT redelivery: eventId={}, traceId={}",
+                        event.eventId(), traceId);
+            }
         } else if (event instanceof ParsedHeartbeat) {
             // Phase 6 心跳管理器接入点
             log.debug("心跳消息暂存: deviceId={}", ((ParsedHeartbeat) event).deviceId());

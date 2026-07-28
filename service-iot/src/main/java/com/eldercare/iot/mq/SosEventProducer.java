@@ -2,7 +2,6 @@ package com.eldercare.iot.mq;
 
 import com.eldercare.iot.entity.IotMqOutbox;
 import com.eldercare.iot.metrics.IotMetrics;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendResult;
@@ -35,7 +34,6 @@ public class SosEventProducer {
     static final String TRACE_ID_HEADER = "X-Trace-Id";
 
     private final RocketMQTemplate rocketMQTemplate;
-    private final ObjectMapper objectMapper;
     private final OutboxService outboxService;
     private final IotMetrics metrics;
 
@@ -88,19 +86,19 @@ public class SosEventProducer {
         String error = lastException != null ? lastException.getMessage() : "MQ 返回非 SEND_OK";
         outboxService.recordFailure(outbox.getEventId(), baseRetry + MAX_FRONT_RETRIES,
                 "前台重试 " + MAX_FRONT_RETRIES + " 次失败: " + error);
-        metrics.mqFailed(outbox.getTopic(), outbox.getTag(), error);
+        metrics.mqFailed(outbox.getTopic(), outbox.getTag(), "send_failure");
         log.error("P0 发送失败进入补偿: eventId={}, retryCount 将递增，保持 PENDING", outbox.getEventId());
     }
 
     /**
      * 直接从持久化的 rawEnvelope 序列化，首发与补发字节级一致。
      */
-    private String buildMessageJson(IotMqOutbox outbox) throws Exception {
-        Map<String, Object> rawEnvelope = outbox.getRawEnvelope();
-        if (rawEnvelope == null) {
-            throw new IllegalStateException("Outbox rawEnvelope 为空");
+    private String buildMessageJson(IotMqOutbox outbox) {
+        String rawEnvelopeJson = outbox.getRawEnvelopeJson();
+        if (rawEnvelopeJson == null || rawEnvelopeJson.isBlank()) {
+            throw new IllegalStateException("Outbox rawEnvelopeJson 为空");
         }
-        return objectMapper.writeValueAsString(rawEnvelope);
+        return rawEnvelopeJson;
     }
 
     private String extractTraceId(IotMqOutbox outbox) {

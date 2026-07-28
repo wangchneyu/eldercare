@@ -8,6 +8,8 @@ import com.eldercare.iot.mapper.IotMqOutboxMapper;
 import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.mqtt.InboundMqttMessage;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
@@ -32,15 +34,18 @@ public class OutboxService {
     private final SosEventProducer sosEventProducer;
     private final PlatformTransactionManager transactionManager;
     private final IotMetrics metrics;
+    private final ObjectMapper objectMapper;
 
     public OutboxService(IotMqOutboxMapper outboxMapper,
                          @Lazy SosEventProducer sosEventProducer,
                          PlatformTransactionManager transactionManager,
-                         IotMetrics metrics) {
+                         IotMetrics metrics,
+                         ObjectMapper objectMapper) {
         this.outboxMapper = outboxMapper;
         this.sosEventProducer = sosEventProducer;
         this.transactionManager = transactionManager;
         this.metrics = metrics;
+        this.objectMapper = objectMapper;
     }
 
     /**
@@ -58,14 +63,12 @@ public class OutboxService {
                 log.warn("SOS/FALL 重复消息已忽略: deviceId={}, sourceMessageId={}, eventType={}",
                         event.deviceId(), event.sourceMessageId(), event.eventType());
                 metrics.outboxDuplicate(event.eventType());
+                ackInbound(inbound);
                 return;
             }
 
             // 事务已提交：消息进入可恢复链路，可以 ack MQTT
-            if (inbound != null && inbound.requiresAck()) {
-                inbound.ack();
-                metrics.mqttMessageAcked(String.valueOf(inbound.qos()));
-            }
+            ackInbound(inbound);
 
             log.info("P0 Outbox 已写入: eventId={}, eventType={}", outbox.getEventId(), outbox.getEventType());
             sosEventProducer.send(outbox);
@@ -161,10 +164,26 @@ public class OutboxService {
         outbox.setTag(resolveTag(event.eventType()));
         outbox.setPayload(payload);
         outbox.setRawEnvelope(rawEnvelope);
+        outbox.setRawEnvelopeJson(serializeRawEnvelope(rawEnvelope));
         outbox.setStatus(OutboxStatus.PENDING.getCode());
         outbox.setRetryCount(0);
         outbox.setCreatedAt(OffsetDateTime.now());
         return outbox;
+    }
+
+    private void ackInbound(InboundMqttMessage inbound) {
+        if (inbound != null && inbound.requiresAck()) {
+            inbound.ack();
+            metrics.mqttMessageAcked(String.valueOf(inbound.qos()));
+        }
+    }
+
+    private String serializeRawEnvelope(Map<String, Object> rawEnvelope) {
+        try {
+            return objectMapper.writeValueAsString(rawEnvelope);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("Unable to serialize C05 raw envelope", e);
+        }
     }
 
     private Map<String, Object> buildPayload(ParsedSosEvent event) {

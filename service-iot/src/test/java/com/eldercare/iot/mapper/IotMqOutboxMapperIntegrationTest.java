@@ -15,6 +15,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -184,6 +185,11 @@ class IotMqOutboxMapperIntegrationTest {
 
         outbox.setPayload(payload);
         outbox.setRawEnvelope(rawEnvelope);
+        try {
+            outbox.setRawEnvelopeJson(new ObjectMapper().writeValueAsString(rawEnvelope));
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
         outbox.setStatus(OutboxStatus.PENDING.getCode());
         outbox.setRetryCount(0);
         outbox.setCreatedAt(OffsetDateTime.now());

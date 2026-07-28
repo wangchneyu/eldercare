@@ -68,7 +68,7 @@ public class MqttSubscriber {
             // ① Topic 路由
             Optional<TopicRouter.RouteResult> routeOpt = topicRouter.route(topic);
             if (routeOpt.isEmpty()) {
-                metrics.mqttMessageRejected("invalid_topic");
+                rejectAndAck(inbound, "invalid_topic");
                 return;
             }
             TopicRouter.RouteResult route = routeOpt.get();
@@ -76,7 +76,7 @@ public class MqttSubscriber {
             // ② 消息校验（无 I/O）
             Optional<JsonNode> envelopeOpt = messageValidator.validate(payload);
             if (envelopeOpt.isEmpty()) {
-                metrics.mqttMessageRejected("invalid_payload");
+                rejectAndAck(inbound, "invalid_payload");
                 return;
             }
             JsonNode envelope = envelopeOpt.get();
@@ -92,7 +92,7 @@ public class MqttSubscriber {
             if (!route.deviceId().equals(deviceId)) {
                 log.warn("Topic deviceId 与信封 deviceId 不一致: topicDeviceId={}, envelopeDeviceId={}, traceId={}",
                         route.deviceId(), deviceId, traceId);
-                metrics.mqttMessageRejected("device_id_mismatch");
+                rejectAndAck(inbound, "device_id_mismatch");
                 return;
             }
 
@@ -105,7 +105,7 @@ public class MqttSubscriber {
                 occurredAt = OffsetDateTime.parse(occurredAtStr);
             } catch (Exception e) {
                 log.warn("occurredAt 非法，拒绝消息: occurredAt={}, traceId={}", occurredAtStr, traceId);
-                metrics.mqttMessageRejected("invalid_occurred_at");
+                rejectAndAck(inbound, "invalid_occurred_at");
                 return;
             }
 
@@ -142,6 +142,15 @@ public class MqttSubscriber {
             log.error("MQTT 消息处理异常: traceId={}", traceId, e);
         } finally {
             TraceContext.clear();
+        }
+    }
+
+    /** Terminal input errors must be acknowledged to prevent infinite QoS redelivery. */
+    private void rejectAndAck(InboundMqttMessage inbound, String reason) {
+        metrics.mqttMessageRejected(reason);
+        if (inbound.requiresAck()) {
+            inbound.ack();
+            metrics.mqttMessageAcked(String.valueOf(inbound.qos()));
         }
     }
 }

@@ -136,7 +136,7 @@ class SosEventProducerTest {
         producer.send(outbox);
 
         verify(rocketMQTemplate, never()).syncSend(anyString(), any(Message.class), anyLong());
-        verify(outboxService).markFailed(eq("EVT-BAD"), contains("Outbox rawEnvelope 为空"));
+        verify(outboxService).markFailed(eq("EVT-BAD"), contains("Outbox rawEnvelopeJson 为空"));
     }
 
     @Test
@@ -158,7 +158,8 @@ class SosEventProducerTest {
         String secondJson = secondCaptor.getValue().getPayload();
 
         // JSON 语义等价（不比较字节，因 LinkedHashMap 顺序一致，实际序列化字节也一致）
-        assertEquals(objectMapper.readTree(firstJson), objectMapper.readTree(secondJson));
+        assertEquals(firstJson, secondJson);
+        assertEquals(outbox.getRawEnvelopeJson(), firstJson);
     }
 
     private IotMqOutbox outbox(String eventType, String tag) {
@@ -184,6 +185,9 @@ class SosEventProducerTest {
                 "producer", MqTopicConstants.PRODUCER,
                 "payload", payload
         ));
+        outbox.setRawEnvelopeJson("""
+                {"eventId":"EVT-001","eventType":"%s","schemaVersion":1,"occurredAt":"2026-07-24T02:30:00Z","traceId":"trace-1","producer":"service-iot@1.0.0","payload":{"sourceMessageId":"msg-1","deviceId":"DEV-001","deviceType":"SOS_BUTTON","location":{"locationId":"LOC-001"}}}
+                """.strip().formatted(eventType));
         outbox.setStatus("PENDING");
         outbox.setRetryCount(0);
         outbox.setCreatedAt(OffsetDateTime.now());

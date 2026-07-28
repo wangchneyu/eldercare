@@ -14,7 +14,9 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.OffsetDateTime;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -87,6 +89,14 @@ class MessagePipelineTest {
                 "EVT", "msg", "DEV", OffsetDateTime.now(), "trace", "P001", "RADAR");
         pipeline.handle(hb, null);
         verifyNoInteractions(vitalSignBatchAggregator, outboxService);
+    }
+
+    @Test
+    void p0ExecutorRejection_leavesMessageForMqttRedelivery() {
+        doThrow(new RejectedExecutionException("full")).when(iotP0Executor).execute(any(Runnable.class));
+
+        assertDoesNotThrow(() -> pipeline.handle(sosEvent("SOS_TRIGGERED"), null));
+        verifyNoInteractions(outboxService);
     }
 
     private ParsedVitalSign vitalSign() {

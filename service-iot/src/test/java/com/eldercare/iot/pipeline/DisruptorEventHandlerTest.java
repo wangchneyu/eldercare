@@ -8,6 +8,8 @@ import com.eldercare.iot.enums.BindingType;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
+import com.eldercare.iot.metrics.IotMetrics;
+import com.eldercare.iot.mqtt.InboundMqttMessage;
 import com.eldercare.iot.parser.DeviceMessageParser;
 import com.eldercare.iot.parser.ParserRegistry;
 import com.eldercare.iot.parser.model.ParsedEvent;
@@ -27,6 +29,7 @@ import java.time.OffsetDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -49,6 +52,8 @@ class DisruptorEventHandlerTest {
     ParserRegistry parserRegistry;
     @Mock
     MessagePipeline messagePipeline;
+    @Mock
+    IotMetrics metrics;
 
     @InjectMocks
     DisruptorEventHandler handler;
@@ -65,12 +70,15 @@ class DisruptorEventHandlerTest {
 
     @Test
     void deviceNotFound_dropsMessage() {
-        RawDeviceMessage raw = rawMessage("VITAL_SIGN");
+        AtomicInteger acknowledgements = new AtomicInteger();
+        RawDeviceMessage raw = rawMessage("VITAL_SIGN", acknowledgements);
         when(instanceMapper.selectOne(any())).thenReturn(null);
 
         handler.onEvent(wrap(raw), 0, false);
 
         verify(messagePipeline, never()).handle(any(), any());
+        assertEquals(1, acknowledgements.get());
+        verify(metrics).mqttMessageRejected("unknown_device");
     }
 
     @Test
@@ -202,6 +210,10 @@ class DisruptorEventHandlerTest {
     }
 
     private RawDeviceMessage rawMessage(String messageType) {
+        return rawMessage(messageType, null);
+    }
+
+    private RawDeviceMessage rawMessage(String messageType, AtomicInteger acknowledgements) {
         try {
             JsonNode envelope = mapper.readTree(("""
                     {
@@ -212,10 +224,12 @@ class DisruptorEventHandlerTest {
                         "occurredAt": "2026-07-24T02:30:00Z"
                     }
                     """).formatted(messageType));
+            InboundMqttMessage inbound = acknowledgements == null ? null : new InboundMqttMessage(
+                    "elder/P001/MATTRESS/DEV-001/up/telemetry", null, 1, 1, msg -> acknowledgements.incrementAndGet());
             return new RawDeviceMessage(
                     "elder/P001/MATTRESS/DEV-001/up/telemetry",
                     envelope, "P001", "MATTRESS", "DEV-001", messageType,
-                    "EVT-001", "trace-001", OffsetDateTime.parse("2026-07-24T02:30:00Z"));
+                    "EVT-001", "trace-001", OffsetDateTime.parse("2026-07-24T02:30:00Z"), 1, 1, inbound);
         } catch (Exception e) {
             throw new RuntimeException(e);
         }

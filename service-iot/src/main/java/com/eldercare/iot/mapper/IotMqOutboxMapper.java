@@ -20,14 +20,14 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
     @Update("""
             INSERT INTO iot_mq_outbox (
                 id, event_id, device_id, source_message_id, event_type,
-                topic, tag, payload, raw_envelope, status, retry_count,
+                topic, tag, payload, raw_envelope, raw_envelope_json, status, retry_count,
                 last_error, created_at, sent_at, lease_expire_at, claimed_by
             ) VALUES (
                 #{id}, #{eventId}, #{deviceId}, #{sourceMessageId}, #{eventType},
                 #{topic}, #{tag},
                 #{payload, typeHandler=com.eldercare.iot.config.JsonbTypeHandler},
                 #{rawEnvelope, typeHandler=com.eldercare.iot.config.JsonbTypeHandler},
-                #{status}, #{retryCount}, #{lastError}, #{createdAt}, #{sentAt},
+                #{rawEnvelopeJson}, #{status}, #{retryCount}, #{lastError}, #{createdAt}, #{sentAt},
                 #{leaseExpireAt}, #{claimedBy}
             )
             ON CONFLICT (device_id, source_message_id, event_type) DO NOTHING
@@ -42,7 +42,9 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
     @Update("""
             UPDATE iot_mq_outbox
             SET status = #{newStatus},
-                sent_at = #{sentAt}
+                sent_at = #{sentAt},
+                lease_expire_at = NULL,
+                claimed_by = NULL
             WHERE event_id = #{eventId}
               AND status = #{expectedStatus}
             """)
@@ -58,7 +60,9 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             UPDATE iot_mq_outbox
             SET status = #{newStatus},
                 retry_count = #{retryCount},
-                last_error = #{lastError}
+                last_error = #{lastError},
+                lease_expire_at = NULL,
+                claimed_by = NULL
             WHERE event_id = #{eventId}
               AND status = #{expectedStatus}
             """)
@@ -89,7 +93,7 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             FROM claimed
             WHERE o.id = claimed.id
             RETURNING o.id, o.event_id, o.device_id, o.source_message_id, o.event_type,
-                      o.topic, o.tag, o.payload, o.raw_envelope, o.status, o.retry_count,
+                      o.topic, o.tag, o.payload, o.raw_envelope, o.raw_envelope_json, o.status, o.retry_count,
                       o.last_error, o.created_at, o.sent_at, o.lease_expire_at, o.claimed_by
             """)
     @Results({
@@ -102,6 +106,7 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             @Result(property = "tag", column = "tag"),
             @Result(property = "payload", column = "payload", typeHandler = JsonbTypeHandler.class),
             @Result(property = "rawEnvelope", column = "raw_envelope", typeHandler = JsonbTypeHandler.class),
+            @Result(property = "rawEnvelopeJson", column = "raw_envelope_json"),
             @Result(property = "status", column = "status"),
             @Result(property = "retryCount", column = "retry_count"),
             @Result(property = "lastError", column = "last_error"),
@@ -128,6 +133,16 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
     int updateLease(@Param("eventId") String eventId,
                     @Param("leaseExpireAt") OffsetDateTime leaseExpireAt,
                     @Param("claimedBy") String claimedBy);
+
+    @Update("""
+            UPDATE iot_mq_outbox
+            SET lease_expire_at = NULL,
+                claimed_by = NULL
+            WHERE event_id = #{eventId}
+              AND status = 'PENDING'
+              AND claimed_by = #{claimedBy}
+            """)
+    int releaseLease(@Param("eventId") String eventId, @Param("claimedBy") String claimedBy);
 
     @Select("SELECT COUNT(*) FROM iot_mq_outbox WHERE status = 'PENDING'")
     long countPending();

@@ -44,6 +44,9 @@ public class IotMqOutbox implements Serializable {
     @TableField(typeHandler = JsonbTypeHandler.class)
     private Map<String, Object> rawEnvelope;
 
+    /** Exact C05 JSON produced in the creating transaction and reused by retries. */
+    private String rawEnvelopeJson;
+
     private String status;
 
     private Integer retryCount;

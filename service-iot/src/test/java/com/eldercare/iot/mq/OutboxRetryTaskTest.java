@@ -18,6 +18,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
@@ -83,9 +84,9 @@ class OutboxRetryTaskTest {
     }
 
     @Test
-    void emptyRawEnvelope_isMarkedFailed() {
+    void emptyRawEnvelopeJson_isMarkedFailed() {
         IotMqOutbox outbox = pendingOutbox();
-        outbox.setRawEnvelope(null);
+        outbox.setRawEnvelopeJson(null);
         when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), eq("test-instance")))
                 .thenReturn(List.of(outbox));
 
@@ -96,7 +97,7 @@ class OutboxRetryTaskTest {
                 eq(OutboxStatus.FAILED.getCode()),
                 eq(OutboxStatus.PENDING.getCode()),
                 anyInt(),
-                eq("rawEnvelope 为空，不可恢复")
+                eq("rawEnvelopeJson 为空，不可恢复")
         );
         verify(sosEventProducer, never()).send(any());
         verify(iotP0Executor, never()).execute(any());
@@ -124,7 +125,7 @@ class OutboxRetryTaskTest {
     }
 
     @Test
-    void sendFailure_extendsLease() {
+    void sendFailure_releasesLeaseForNextScan() {
         IotMqOutbox outbox = pendingOutbox();
         when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), eq("test-instance")))
                 .thenReturn(List.of(outbox));
@@ -136,9 +137,21 @@ class OutboxRetryTaskTest {
 
         retryTask.retryPending();
 
-        ArgumentCaptor<OffsetDateTime> captor = ArgumentCaptor.forClass(OffsetDateTime.class);
-        verify(outboxMapper).updateLease(eq("EVT-001"), captor.capture(), eq("test-instance"));
+        verify(outboxMapper).releaseLease("EVT-001", "test-instance");
         assertEquals(OutboxStatus.PENDING.getCode(), outbox.getStatus());
+    }
+
+    @Test
+    void executorRejection_releasesLeaseForNextScan() {
+        IotMqOutbox outbox = pendingOutbox();
+        when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), eq("test-instance")))
+                .thenReturn(List.of(outbox));
+        doThrow(new RejectedExecutionException("full")).when(iotP0Executor).execute(any(Runnable.class));
+
+        retryTask.retryPending();
+
+        verify(outboxMapper).releaseLease("EVT-001", "test-instance");
+        verifyNoInteractions(sosEventProducer);
     }
 
     private IotMqOutbox pendingOutbox() {
@@ -159,6 +172,7 @@ class OutboxRetryTaskTest {
                 "traceId", "trace-retry",
                 "payload", Map.of("traceId", "trace-retry")
         ));
+        outbox.setRawEnvelopeJson("{\"eventId\":\"EVT-001\",\"traceId\":\"trace-retry\"}");
         outbox.setStatus(OutboxStatus.PENDING.getCode());
         outbox.setRetryCount(2);
         outbox.setCreatedAt(OffsetDateTime.now());

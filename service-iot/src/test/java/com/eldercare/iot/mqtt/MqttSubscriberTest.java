@@ -13,6 +13,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -86,7 +87,7 @@ class MqttSubscriberTest {
         String topic = "bad/topic";
         when(topicRouter.route(topic)).thenReturn(Optional.empty());
 
-        dispatch(topic, "{}", 1, 1);
+        assertEquals(1, dispatch(topic, "{}", 1, 1));
 
         verify(disruptorPublisher, never()).publish(any());
     }
@@ -98,7 +99,7 @@ class MqttSubscriberTest {
                 new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
         when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.empty());
 
-        dispatch(topic, "{}", 1, 1);
+        assertEquals(1, dispatch(topic, "{}", 1, 1));
 
         verify(disruptorPublisher, never()).publish(any());
     }
@@ -125,7 +126,7 @@ class MqttSubscriberTest {
         }
         when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
 
-        dispatch(topic, payload, 1, 1);
+        assertEquals(1, dispatch(topic, payload, 1, 1));
 
         verify(disruptorPublisher, never()).publish(any());
         verify(metrics).mqttMessageRejected("device_id_mismatch");
@@ -153,7 +154,7 @@ class MqttSubscriberTest {
         }
         when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
 
-        dispatch(topic, payload, 1, 1);
+        assertEquals(1, dispatch(topic, payload, 1, 1));
 
         verify(disruptorPublisher, never()).publish(any());
         verify(metrics).mqttMessageRejected("invalid_occurred_at");
@@ -182,7 +183,7 @@ class MqttSubscriberTest {
         when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
         when(disruptorPublisher.publish(any(RawDeviceMessage.class))).thenReturn(false);
 
-        dispatch(topic, payload, 1, 1);
+        assertEquals(0, dispatch(topic, payload, 1, 1));
 
         verify(disruptorPublisher).publish(any(RawDeviceMessage.class));
         verify(metrics).ringBufferRejected();
@@ -194,11 +195,14 @@ class MqttSubscriberTest {
         verify(connectionManager).disconnect();
     }
 
-    private void dispatch(String topic, String payload, int messageId, int qos) {
+    private int dispatch(String topic, String payload, int messageId, int qos) {
         ArgumentCaptor<MqttConnectionManager.MessageHandler> captor = ArgumentCaptor.forClass(MqttConnectionManager.MessageHandler.class);
         subscriber.init();
         verify(connectionManager).setMessageHandler(captor.capture());
-        InboundMqttMessage inbound = new InboundMqttMessage(topic, payload.getBytes(StandardCharsets.UTF_8), messageId, qos, msg -> {});
+        AtomicInteger acknowledgements = new AtomicInteger();
+        InboundMqttMessage inbound = new InboundMqttMessage(
+                topic, payload.getBytes(StandardCharsets.UTF_8), messageId, qos, msg -> acknowledgements.incrementAndGet());
         captor.getValue().handle(inbound);
+        return acknowledgements.get();
     }
 }

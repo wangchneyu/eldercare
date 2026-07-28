@@ -20,6 +20,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Outbox 补发任务：原子 claim/租约机制防止首次发送与定时扫描、多个实例扫描重复并发发送。
@@ -82,39 +83,46 @@ public class OutboxRetryTask {
 
         log.info("Outbox 补发扫描: {} 条记录被实例 {} 领取", claimed.size(), instanceId);
         for (IotMqOutbox outbox : claimed) {
-            // 不可恢复数据错误：rawEnvelope 为空时直接标记 FAILED
-            if (outbox.getRawEnvelope() == null) {
-                log.error("Outbox rawEnvelope 为空，标记 FAILED: eventId={}", outbox.getEventId());
+            // No persisted original JSON means a retry cannot safely reconstruct C05.
+            if (outbox.getRawEnvelopeJson() == null || outbox.getRawEnvelopeJson().isBlank()) {
+                log.error("Outbox rawEnvelopeJson 为空，标记 FAILED: eventId={}", outbox.getEventId());
                 outboxMapper.updateFailureConditionally(
                         outbox.getEventId(),
                         OutboxStatus.FAILED.getCode(),
                         OutboxStatus.PENDING.getCode(),
                         outbox.getRetryCount() == null ? 0 : outbox.getRetryCount(),
-                        "rawEnvelope 为空，不可恢复"
+                        "rawEnvelopeJson 为空，不可恢复"
                 );
                 continue;
             }
 
-            iotP0Executor.execute(() -> {
-                try {
-                    TraceContext.setTraceId(extractTraceId(outbox));
-                    sosEventProducer.send(outbox);
-                } catch (Exception e) {
-                    log.error("Outbox 补发执行异常: eventId={}", outbox.getEventId(), e);
-                    extendLease(outbox);
-                } finally {
-                    TraceContext.clear();
-                }
-            });
+            try {
+                iotP0Executor.execute(() -> {
+                    try {
+                        TraceContext.setTraceId(extractTraceId(outbox));
+                        sosEventProducer.send(outbox);
+                    } catch (Exception e) {
+                        log.error("Outbox 补发执行异常: eventId={}", outbox.getEventId(), e);
+                        releaseLease(outbox);
+                    } finally {
+                        TraceContext.clear();
+                    }
+                });
+            } catch (RejectedExecutionException e) {
+                log.warn("P0 executor is full; release Outbox lease: eventId={}", outbox.getEventId());
+                releaseLease(outbox);
+            }
         }
     }
 
-    private void extendLease(IotMqOutbox outbox) {
+    private void releaseLease(IotMqOutbox outbox) {
         try {
-            OffsetDateTime leaseExpireAt = OffsetDateTime.now().plus(leaseMinutes, ChronoUnit.MINUTES);
-            outboxMapper.updateLease(outbox.getEventId(), leaseExpireAt, instanceId);
+            int rows = outboxMapper.releaseLease(outbox.getEventId(), instanceId);
+            if (rows == 0) {
+                metrics.outboxLeaseConflict(outbox.getEventId());
+            }
         } catch (Exception e) {
-            log.error("延长 Outbox 租约失败: eventId={}", outbox.getEventId(), e);
+            log.error("释放 Outbox 租约失败: eventId={}", outbox.getEventId(), e);
         }
     }
 
