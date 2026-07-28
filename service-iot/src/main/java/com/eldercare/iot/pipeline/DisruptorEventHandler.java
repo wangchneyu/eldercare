@@ -105,6 +105,7 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         // ③ 解析 payload（只在此处执行）
         ParsedEvent parsed = parser.parse(raw).orElse(null);
         if (parsed == null) {
+            metrics.mqttMessageParseFailed("device_parser");
             log.warn("Payload 解析失败: deviceId={}, messageType={}", raw.deviceId(), raw.messageType());
             rejectAndAck(raw, "parse_failed");
             return;

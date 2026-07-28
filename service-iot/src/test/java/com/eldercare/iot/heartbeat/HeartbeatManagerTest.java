@@ -68,6 +68,20 @@ class HeartbeatManagerTest {
                 manager.getState("DEV-001").orElseThrow().timeoutSeconds());
     }
 
+    @Test
+    void statusCountsAndOldestHeartbeatAgeReflectCurrentState() {
+        HeartbeatManager manager = new HeartbeatManager(Clock.fixed(START, ZoneOffset.UTC));
+        manager.recordHeartbeat(heartbeat("trace-1"), 15);
+
+        assertEquals(1, manager.statusCount(OnlineStatus.ONLINE));
+        assertEquals(0, manager.statusCount(OnlineStatus.OFFLINE));
+        assertEquals(0, manager.oldestOnlineHeartbeatAgeSeconds());
+
+        manager.detectTimeouts(OffsetDateTime.ofInstant(START.plusSeconds(16), ZoneOffset.UTC));
+        assertEquals(0, manager.statusCount(OnlineStatus.ONLINE));
+        assertEquals(1, manager.statusCount(OnlineStatus.OFFLINE));
+    }
+
     private ParsedHeartbeat heartbeat(String traceId) {
         return new ParsedHeartbeat(
                 "EVT-001",

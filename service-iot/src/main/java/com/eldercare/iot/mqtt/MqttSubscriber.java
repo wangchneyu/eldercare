@@ -76,6 +76,7 @@ public class MqttSubscriber {
             // ② 消息校验（无 I/O）
             Optional<JsonNode> envelopeOpt = messageValidator.validate(payload);
             if (envelopeOpt.isEmpty()) {
+                metrics.mqttMessageParseFailed("envelope_validation");
                 rejectAndAck(inbound, "invalid_payload");
                 return;
             }
@@ -139,6 +140,7 @@ public class MqttSubscriber {
                     inbound.messageId(), inbound.qos());
 
         } catch (Exception e) {
+            metrics.mqttMessageProcessingFailed("mqtt_callback");
             log.error("MQTT 消息处理异常: traceId={}", traceId, e);
         } finally {
             TraceContext.clear();

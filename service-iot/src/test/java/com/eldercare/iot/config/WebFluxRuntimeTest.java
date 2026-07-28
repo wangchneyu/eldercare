@@ -20,7 +20,7 @@ import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.when;
 
 @WebFluxTest(controllers = DeviceModelController.class)
-@Import({DeviceModelController.class, WebFluxConfig.class, IotReactiveExceptionHandler.class})
+@Import({DeviceModelController.class, WebFluxConfig.class, IotReactiveExceptionHandler.class, IotTraceWebFilter.class})
 @ContextConfiguration(classes = WebFluxRuntimeTest.TestApplication.class)
 @ActiveProfiles("test")
 class WebFluxRuntimeTest {
@@ -43,6 +43,31 @@ class WebFluxRuntimeTest {
                 .expectBody()
                 .jsonPath("$.code").isEqualTo(0)
                 .jsonPath("$.data.records").isArray();
+    }
+
+    @Test
+    void restTraceIdIsReturnedAndPropagatedToResponseBody() {
+        when(deviceModelService.list(nullable(String.class), nullable(String.class), anyInt(), anyInt()))
+                .thenReturn(new Page<>());
+
+        webTestClient.get()
+                .uri("/api/iot/device-models?page=1&size=20")
+                .header(IotTraceWebFilter.TRACE_ID_HEADER, "rest-trace-001")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().valueEquals(IotTraceWebFilter.TRACE_ID_HEADER, "rest-trace-001")
+                .expectBody()
+                .jsonPath("$.traceId").isEqualTo("rest-trace-001");
+    }
+
+    @Test
+    void missingRouteReturnsNotFoundInsteadOfInternalServerError() {
+        webTestClient.get()
+                .uri("/api/iot/missing")
+                .exchange()
+                .expectStatus().isNotFound()
+                .expectBody()
+                .jsonPath("$.code").isEqualTo(100009);
     }
 
     @SpringBootConfiguration

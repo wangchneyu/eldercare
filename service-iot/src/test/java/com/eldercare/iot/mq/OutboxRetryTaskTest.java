@@ -125,6 +125,18 @@ class OutboxRetryTaskTest {
     }
 
     @Test
+    void refreshesCachedOutboxMetricsBeforeClaimingRecords() {
+        when(outboxMapper.countPending()).thenReturn(4L);
+        when(outboxMapper.oldestPendingAgeSeconds()).thenReturn(12L);
+        when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), eq("test-instance")))
+                .thenReturn(List.of());
+
+        retryTask.retryPending();
+
+        verify(metrics).updateOutboxSnapshot(4L, 12L);
+    }
+
+    @Test
     void sendFailure_releasesLeaseForNextScan() {
         IotMqOutbox outbox = pendingOutbox();
         when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), eq("test-instance")))

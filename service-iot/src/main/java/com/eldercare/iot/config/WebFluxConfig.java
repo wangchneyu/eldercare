@@ -20,6 +20,7 @@ public class WebFluxConfig implements WebFluxConfigurer {
         executor.setCorePoolSize(8);
         executor.setMaxPoolSize(32);
         executor.setQueueCapacity(500);
+        executor.setTaskDecorator(new TraceContextTaskDecorator());
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(15);
         executor.initialize();

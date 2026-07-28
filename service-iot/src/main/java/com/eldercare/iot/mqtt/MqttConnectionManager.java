@@ -1,5 +1,6 @@
 package com.eldercare.iot.mqtt;
 
+import com.eldercare.iot.metrics.IotMetrics;
 import org.eclipse.paho.client.mqttv3.*;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
 import org.slf4j.Logger;
@@ -43,8 +44,9 @@ public class MqttConnectionManager {
     }
 
     private final MqttConfig mqttConfig;
+    private final IotMetrics metrics;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-        Thread t = new Thread(r, "mqtt-reconnect");
+        Thread t = new Thread(r, "iot-mqtt-reconnect-1");
         t.setDaemon(true);
         return t;
     });
@@ -56,8 +58,9 @@ public class MqttConnectionManager {
 
     private volatile MqttClient mqttClient;
 
-    public MqttConnectionManager(MqttConfig mqttConfig) {
+    public MqttConnectionManager(MqttConfig mqttConfig, IotMetrics metrics) {
         this.mqttConfig = mqttConfig;
+        this.metrics = metrics;
     }
 
     // ──────────────────────────── Public API ────────────────────────────
@@ -88,6 +91,7 @@ public class MqttConnectionManager {
             log.info("Connecting to MQTT broker at {} ...", mqttConfig.getBrokerUrl());
             mqttClient.connect(options);
         } catch (MqttException e) {
+            metrics.mqttConnectionFailed();
             log.error("Failed to connect to MQTT broker: {}", e.getMessage(), e);
             scheduleReconnect();
         }
@@ -107,6 +111,8 @@ public class MqttConnectionManager {
                 log.warn("Error while disconnecting MQTT client: {}", e.getMessage(), e);
             }
         }
+        connected.set(false);
+        metrics.mqttDisconnected();
     }
 
     /**
@@ -170,6 +176,7 @@ public class MqttConnectionManager {
             log.warn("Error during MQTT shutdown: {}", e.getMessage(), e);
         } finally {
             connected.set(false);
+            metrics.mqttDisconnected();
             scheduler.shutdownNow();
             log.info("MQTT connection manager shut down");
         }
@@ -264,6 +271,7 @@ public class MqttConnectionManager {
         @Override
         public void connectComplete(boolean reconnect, String serverURI) {
             connected.set(true);
+            metrics.mqttConnected(reconnect);
             backoffSeconds.set(BASE_BACKOFF_SECONDS);
             cancelPendingReconnect();
 
@@ -280,7 +288,8 @@ public class MqttConnectionManager {
         @Override
         public void connectionLost(Throwable cause) {
             connected.set(false);
-            log.warn("MQTT connection lost: {}", cause.getMessage());
+            metrics.mqttDisconnected();
+            log.warn("MQTT connection lost: {}", cause == null ? "unknown" : cause.getMessage());
             scheduleReconnect();
         }
 

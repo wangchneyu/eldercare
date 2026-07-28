@@ -57,15 +57,11 @@ public class OutboxRetryTask {
             host = "unknown";
         }
         this.instanceId = host + "-" + UUID.randomUUID().toString().substring(0, 8);
-        metrics.registerOutboxPendingGauge("outbox_pending", outboxMapper::countPending);
-        metrics.registerOutboxOldestAgeGauge("outbox_oldest_age", () -> {
-            Long age = outboxMapper.oldestPendingAgeSeconds();
-            return age != null ? age : 0L;
-        });
     }
 
     @Scheduled(fixedDelayString = "${iot.outbox.retry.fixed-delay-ms:10000}")
     public void retryPending() {
+        refreshMetrics();
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime leaseExpireAt = now.plus(leaseMinutes, ChronoUnit.MINUTES);
 
@@ -123,6 +119,14 @@ public class OutboxRetryTask {
             }
         } catch (Exception e) {
             log.error("释放 Outbox 租约失败: eventId={}", outbox.getEventId(), e);
+        }
+    }
+
+    private void refreshMetrics() {
+        try {
+            metrics.updateOutboxSnapshot(outboxMapper.countPending(), outboxMapper.oldestPendingAgeSeconds());
+        } catch (Exception e) {
+            log.warn("Outbox metrics refresh failed: reason={}", e.getMessage());
         }
     }
 

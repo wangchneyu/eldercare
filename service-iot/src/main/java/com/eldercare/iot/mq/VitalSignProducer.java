@@ -1,6 +1,8 @@
 package com.eldercare.iot.mq;
 
+import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.iot.metrics.IotMetrics;
+import io.micrometer.core.instrument.Timer;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -68,30 +70,51 @@ public class VitalSignProducer {
                 .setHeader(TRACE_ID_HEADER, event.traceId())
                 .build();
         retryCounters.computeIfAbsent(event.eventId(), k -> new AtomicInteger(0));
+        Timer.Sample sendTimer = metrics.startTimer();
 
         rocketMQTemplate.asyncSend(destination, message, new SendCallback() {
             @Override
             public void onSuccess(SendResult sendResult) {
-                retryCounters.remove(event.eventId());
-                metrics.mqSent(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType());
-                log.debug("体征发送成功: eventId={}, topic={}", event.eventId(), destination);
+                withTraceId(event.traceId(), () -> {
+                    metrics.recordMqSendLatency(sendTimer, MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType());
+                    retryCounters.remove(event.eventId());
+                    metrics.mqSent(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType());
+                    log.debug("体征发送成功: eventId={}, topic={}", event.eventId(), destination);
+                });
             }
 
             @Override
             public void onException(Throwable e) {
-                int currentAttempt = retryCounters.get(event.eventId()).incrementAndGet();
-                log.warn("体征发送失败: eventId={}, attempt={}", event.eventId(), currentAttempt, e);
-                metrics.mqRetried(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), currentAttempt);
-                if (currentAttempt <= MAX_RETRIES) {
-                    long delay = RETRY_DELAYS_MS[currentAttempt - 1];
-                    iotRetryScheduler.schedule(() -> sendInternal(event, currentAttempt), delay, TimeUnit.MILLISECONDS);
-                } else {
-                    retryCounters.remove(event.eventId());
-                    metrics.mqFailed(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), e.getMessage());
-                    log.error("体征发送三次重试后仍未成功，按默认策略丢弃: eventId={}", event.eventId());
-                }
+                withTraceId(event.traceId(), () -> {
+                    metrics.recordMqSendLatency(sendTimer, MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType());
+                    int currentAttempt = retryCounters.get(event.eventId()).incrementAndGet();
+                    log.warn("体征发送失败: eventId={}, attempt={}", event.eventId(), currentAttempt, e);
+                    metrics.mqRetried(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), currentAttempt);
+                    if (currentAttempt <= MAX_RETRIES) {
+                        long delay = RETRY_DELAYS_MS[currentAttempt - 1];
+                        iotRetryScheduler.schedule(() -> sendInternal(event, currentAttempt), delay, TimeUnit.MILLISECONDS);
+                    } else {
+                        retryCounters.remove(event.eventId());
+                        metrics.mqFailed(MqTopicConstants.VITAL_SIGN_TOPIC, event.deviceType(), "send_failure");
+                        log.error("体征发送三次重试后仍未成功，按默认策略丢弃: eventId={}", event.eventId());
+                    }
+                });
             }
         }, 3_000L);
+    }
+
+    private static void withTraceId(String traceId, Runnable action) {
+        String previousTraceId = TraceContext.currentTraceId();
+        try {
+            TraceContext.setTraceId(traceId);
+            action.run();
+        } finally {
+            if (previousTraceId == null) {
+                TraceContext.clear();
+            } else {
+                TraceContext.setTraceId(previousTraceId);
+            }
+        }
     }
 
     /**

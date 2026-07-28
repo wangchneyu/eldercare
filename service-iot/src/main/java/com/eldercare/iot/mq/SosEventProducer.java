@@ -2,6 +2,7 @@ package com.eldercare.iot.mq;
 
 import com.eldercare.iot.entity.IotMqOutbox;
 import com.eldercare.iot.metrics.IotMetrics;
+import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.rocketmq.client.producer.SendResult;
@@ -61,6 +62,7 @@ public class SosEventProducer {
         Exception lastException = null;
 
         for (int attempt = 1; attempt <= MAX_FRONT_RETRIES; attempt++) {
+            Timer.Sample sendTimer = metrics.startTimer();
             try {
                 SendResult sendResult = rocketMQTemplate.syncSend(destination, message, SEND_TIMEOUT_MS);
                 if (sendResult != null && SendStatus.SEND_OK == sendResult.getSendStatus()) {
@@ -79,6 +81,8 @@ public class SosEventProducer {
                 lastException = e;
                 log.warn("P0 发送异常: eventId={}, attempt={}", outbox.getEventId(), attempt, e);
                 metrics.mqRetried(outbox.getTopic(), outbox.getTag(), attempt);
+            } finally {
+                metrics.recordMqSendLatency(sendTimer, outbox.getTopic(), outbox.getTag());
             }
         }
 

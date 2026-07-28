@@ -38,6 +38,9 @@ mybatis-plus:
 
 # Actuator
 management:
+  endpoint:
+    prometheus:
+      enabled: true
   endpoints:
     web:
       exposure:
@@ -45,6 +48,10 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  prometheus:
+    metrics:
+      export:
+        enabled: true
 
 # MQTT（通用配置，dev 环境覆盖）
 mqtt:
@@ -79,6 +86,8 @@ spring.cloud.openfeign:
 
 # 日志
 logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} %-5level [%thread] traceId=%X{traceId:-} %logger{36} - %msg%n"
   level:
     com.eldercare.iot: DEBUG
     org.apache.rocketmq: WARN

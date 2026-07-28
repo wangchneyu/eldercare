@@ -8,6 +8,7 @@ import com.eldercare.iot.parser.model.ParsedVitalSign;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.time.Duration;
 import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -135,6 +136,23 @@ public class HeartbeatManager {
      */
     public int dirtyStateCount() {
         return dirtyStates.size();
+    }
+
+    public long statusCount(OnlineStatus status) {
+        return states.values().stream()
+                .filter(state -> state.onlineStatus() == status)
+                .count();
+    }
+
+    public long oldestOnlineHeartbeatAgeSeconds() {
+        OffsetDateTime now = OffsetDateTime.now(clock).withOffsetSameInstant(ZoneOffset.UTC);
+        return states.values().stream()
+                .filter(state -> state.onlineStatus() == OnlineStatus.ONLINE)
+                .map(HeartbeatState::lastHeartbeatAt)
+                .filter(java.util.Objects::nonNull)
+                .mapToLong(heartbeatAt -> Math.max(0, Duration.between(heartbeatAt, now).getSeconds()))
+                .max()
+                .orElse(0L);
     }
 
     public boolean acknowledgeFlushed(String deviceId, long version) {

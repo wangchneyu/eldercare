@@ -10,6 +10,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.reactive.resource.NoResourceFoundException;
 import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.ServerWebInputException;
 
@@ -43,6 +44,12 @@ public class IotReactiveExceptionHandler {
     public ResponseEntity<R<Void>> handleInput(ServerWebInputException exception) {
         log.warn("Invalid request input: {}", exception.getReason());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(R.fail(SystemErrorCode.BAD_REQUEST));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<R<Void>> handleNotFound(NoResourceFoundException exception) {
+        log.warn("Resource not found: {}", exception.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(R.fail(SystemErrorCode.NOT_FOUND));
     }
 
     @ExceptionHandler(Exception.class)

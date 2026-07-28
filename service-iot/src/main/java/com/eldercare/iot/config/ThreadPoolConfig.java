@@ -29,6 +29,7 @@ public class ThreadPoolConfig {
         executor.setCorePoolSize(4);
         executor.setMaxPoolSize(8);
         executor.setQueueCapacity(1000);
+        executor.setTaskDecorator(new TraceContextTaskDecorator());
         executor.setRejectedExecutionHandler(rejectionHandler("iotMqExecutor", metrics));
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
@@ -43,6 +44,7 @@ public class ThreadPoolConfig {
         executor.setCorePoolSize(2);
         executor.setMaxPoolSize(4);
         executor.setQueueCapacity(500);
+        executor.setTaskDecorator(new TraceContextTaskDecorator());
         executor.setRejectedExecutionHandler(rejectionHandler("iotP0Executor", metrics));
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(10);
