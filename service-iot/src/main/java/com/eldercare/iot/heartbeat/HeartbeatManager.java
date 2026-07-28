@@ -130,6 +130,13 @@ public class HeartbeatManager {
         return List.copyOf(dirtyStates.values());
     }
 
+    /**
+     * 供批量刷库阈值判断使用，避免每条入站消息都复制全部脏状态快照。
+     */
+    public int dirtyStateCount() {
+        return dirtyStates.size();
+    }
+
     public boolean acknowledgeFlushed(String deviceId, long version) {
         return dirtyStates.computeIfPresent(deviceId, (key, current) ->
                 current.version() == version ? null : current) == null;

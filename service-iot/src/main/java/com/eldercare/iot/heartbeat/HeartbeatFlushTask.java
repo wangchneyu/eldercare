@@ -46,7 +46,7 @@ public class HeartbeatFlushTask {
     }
 
     public void requestFlushIfBatchReady() {
-        if (heartbeatManager.snapshotDirtyStates().size() < batchTriggerSize
+        if (heartbeatManager.dirtyStateCount() < batchTriggerSize
                 || !flushScheduled.compareAndSet(false, true)) {
             return;
         }
