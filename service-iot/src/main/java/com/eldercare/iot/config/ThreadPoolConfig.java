@@ -4,6 +4,7 @@ import com.eldercare.iot.metrics.IotMetrics;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -49,13 +50,26 @@ public class ThreadPoolConfig {
         return executor;
     }
 
-    @Bean(name = {"iotRetryScheduler", "taskScheduler"}, destroyMethod = "shutdownNow")
+    @Bean(name = "iotRetryScheduler", destroyMethod = "shutdownNow")
     public ScheduledExecutorService iotRetryScheduler() {
         return Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "iot-retry-1");
             t.setDaemon(true);
             return t;
         });
+    }
+
+    /**
+     * Spring @Scheduled 专用调度器。Outbox 的 P0 补发扫描不得与体征失败重试共用线程。
+     */
+    @Bean(name = "taskScheduler", destroyMethod = "shutdown")
+    public ThreadPoolTaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(1);
+        scheduler.setThreadNamePrefix("iot-outbox-scheduler-");
+        scheduler.setWaitForTasksToCompleteOnShutdown(true);
+        scheduler.setAwaitTerminationSeconds(10);
+        return scheduler;
     }
 
     @Bean(name = "iotVitalFlushScheduler", destroyMethod = "shutdownNow")

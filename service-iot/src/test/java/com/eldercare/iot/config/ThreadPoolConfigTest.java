@@ -6,7 +6,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.RejectedExecutionException;
@@ -91,5 +93,24 @@ class ThreadPoolConfigTest {
 
         block.countDown();
         executor.shutdown();
+    }
+
+    @Test
+    void scheduledOutboxWorkUsesDedicatedScheduler() throws InterruptedException {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolConfig().taskScheduler();
+        scheduler.initialize();
+        try {
+            CountDownLatch executed = new CountDownLatch(1);
+            AtomicReference<String> threadName = new AtomicReference<>();
+            scheduler.execute(() -> {
+                threadName.set(Thread.currentThread().getName());
+                executed.countDown();
+            });
+
+            assertTrue(executed.await(1, TimeUnit.SECONDS));
+            assertTrue(threadName.get().startsWith("iot-outbox-scheduler-"));
+        } finally {
+            scheduler.shutdown();
+        }
     }
 }
