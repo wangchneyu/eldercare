@@ -8,6 +8,7 @@ import com.eldercare.iot.entity.IotMqOutbox;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
 import com.eldercare.iot.mapper.IotMqOutboxMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -23,11 +24,16 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.messaging.Message;
 import org.springframework.test.context.ActiveProfiles;
 
 import java.nio.charset.StandardCharsets;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -39,11 +45,11 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 
 /**
- * Opt-in EMQX smoke test for the P0 path. It requires PostgreSQL and EMQX 5.8.8
- * on localhost, and deliberately keeps RocketMQ mocked so acknowledgement and
- * Outbox durability can be isolated from MQ broker availability.
+ * Opt-in EMQX smoke test for the P0 and heartbeat paths. It requires PostgreSQL and
+ * EMQX 5.8.8 on localhost, and deliberately keeps RocketMQ mocked so MQTT acknowledgement,
+ * Outbox durability and heartbeat-to-REST behavior can be isolated from MQ broker availability.
  */
-@SpringBootTest(properties = {
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
         "mqtt.auto-connect=true",
         "mqtt.broker-url=tcp://localhost:1883",
         "mqtt.client-id=iot-service-e2e",
@@ -69,6 +75,8 @@ class MqttP0EmqxIntegrationTest {
     private MeterRegistry meterRegistry;
     @Autowired
     private ObjectMapper objectMapper;
+    @LocalServerPort
+    private int port;
 
     private Long modelId;
     private Long instanceId;
@@ -94,7 +102,7 @@ class MqttP0EmqxIntegrationTest {
 
         String deviceId = "E2E-" + UUID.randomUUID();
         String messageId = "MSG-" + UUID.randomUUID();
-        createActiveSimulatorDevice(deviceId);
+        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
         double acknowledgementsBefore = ackCount();
 
         publishQos1(deviceId, messageId);
@@ -118,15 +126,36 @@ class MqttP0EmqxIntegrationTest {
                 "an acknowledged QoS1 message must not be redelivered after persistent-session reconnect");
     }
 
-    private void createActiveSimulatorDevice(String deviceId) {
+    @Test
+    void qos1Heartbeat_updatesStatusEndpoint_timesOut_andRecovers() throws Exception {
+        await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
+
+        String deviceId = "HB-E2E-" + UUID.randomUUID();
+        createActiveSimulatorDevice(deviceId, "RADAR", 5);
+
+        publishHeartbeat(deviceId, "HB-MSG-1-" + UUID.randomUUID());
+        await(() -> "ONLINE".equals(readOnlineStatus(deviceId)), 10_000,
+                "heartbeat did not update the REST status endpoint to ONLINE");
+
+        await(() -> "OFFLINE".equals(readOnlineStatus(deviceId)), 10_000,
+                "heartbeat timeout did not update the REST status endpoint to OFFLINE");
+        assertStatusEvents(deviceId, "ONLINE", "OFFLINE");
+
+        publishHeartbeat(deviceId, "HB-MSG-2-" + UUID.randomUUID());
+        await(() -> "ONLINE".equals(readOnlineStatus(deviceId)), 10_000,
+                "recovered heartbeat did not update the REST status endpoint to ONLINE");
+        assertStatusEvents(deviceId, "ONLINE", "OFFLINE", "RECOVERED");
+    }
+
+    private void createActiveSimulatorDevice(String deviceId, String deviceType, int heartbeatTimeoutSeconds) {
         modelId = IdWorker.getId();
         IotDeviceModel model = new IotDeviceModel();
         model.setId(modelId);
         model.setModelCode("E2E-MODEL-" + UUID.randomUUID());
         model.setManufacturer("eldercare");
-        model.setDeviceType("SOS_BUTTON");
+        model.setDeviceType(deviceType);
         model.setParserCode("simulator");
-        model.setHeartbeatTimeoutSeconds(15);
+        model.setHeartbeatTimeoutSeconds(heartbeatTimeoutSeconds);
         model.setEnabled(true);
         model.setVersion(0);
         model.setCreatedAt(OffsetDateTime.now());
@@ -172,6 +201,33 @@ class MqttP0EmqxIntegrationTest {
         }
     }
 
+    private void publishHeartbeat(String deviceId, String messageId) throws Exception {
+        String topic = "elder/P001/RADAR/" + deviceId + "/up/heartbeat";
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("messageId", messageId);
+        payload.put("deviceId", deviceId);
+        payload.put("messageType", "HEARTBEAT");
+        payload.put("protocolVersion", "1.0");
+        payload.put("occurredAt", OffsetDateTime.now().toString());
+        payload.put("payload", Map.of());
+
+        MqttClient publisher = new MqttClient("tcp://localhost:1883", "heartbeat-publisher-" + UUID.randomUUID(),
+                new MemoryPersistence());
+        try {
+            MqttConnectOptions options = new MqttConnectOptions();
+            options.setCleanSession(true);
+            publisher.connect(options);
+            MqttMessage message = new MqttMessage(objectMapper.writeValueAsBytes(payload));
+            message.setQos(1);
+            publisher.publish(topic, message);
+        } finally {
+            if (publisher.isConnected()) {
+                publisher.disconnect();
+            }
+            publisher.close();
+        }
+    }
+
     private IotMqOutbox awaitOutbox(String deviceId, String messageId) throws InterruptedException {
         final IotMqOutbox[] result = new IotMqOutbox[1];
         await(() -> {
@@ -194,6 +250,33 @@ class MqttP0EmqxIntegrationTest {
                 .tags("status", "acked", "qos", "1")
                 .counter();
         return counter == null ? 0 : counter.count();
+    }
+
+    private String readOnlineStatus(String deviceId) {
+        try {
+            return getJson("/api/iot/devices/" + deviceId + "/status")
+                    .path("data").path("onlineStatus").asText();
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void assertStatusEvents(String deviceId, String... expectedEventTypes) throws Exception {
+        JsonNode events = getJson("/api/iot/devices/" + deviceId + "/status-events").path("data");
+        assertEquals(expectedEventTypes.length, events.size());
+        for (int i = 0; i < expectedEventTypes.length; i++) {
+            assertEquals(expectedEventTypes[i], events.get(i).path("eventType").asText());
+        }
+    }
+
+    private JsonNode getJson(String path) throws Exception {
+        HttpRequest request = HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+                .GET()
+                .build();
+        HttpResponse<String> response = HttpClient.newHttpClient().send(request,
+                HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+        assertEquals(200, response.statusCode(), response.body());
+        return objectMapper.readTree(response.body());
     }
 
     private void await(BooleanSupplier condition, long timeoutMillis, String failureMessage) throws InterruptedException {
