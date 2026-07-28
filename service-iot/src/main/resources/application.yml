@@ -64,10 +64,9 @@ rocketmq:
     retry-times-when-send-failed: 3
     retry-times-when-send-async-failed: 3
 
-# care-service 长者校验。C07 契约冻结前默认 Mock；切换 Feign 后仍保持 500ms 内超时失败。
+# care-service 长者校验。C07 的按 elderId 查询契约冻结前，仅允许 Mock。
 iot:
   care-validation:
-    mode: ${IOT_CARE_VALIDATION_MODE:mock}
     mock-scenario: ${IOT_CARE_MOCK_SCENARIO:active}
 
 spring.cloud.openfeign:
