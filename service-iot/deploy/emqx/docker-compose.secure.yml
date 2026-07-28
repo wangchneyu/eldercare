@@ -1,0 +1,20 @@
+services:
+  emqx:
+    image: emqx/emqx:5.8.8
+    container_name: eldercare-emqx-secure-test
+    environment:
+      EMQX_NODE__COOKIE: local-only-emqx-node-cookie
+    ports:
+      - "1885:1883"
+      - "18085:18083"
+      - "8085:8083"
+    volumes:
+      - ./local-secure/base.hocon:/opt/emqx/etc/base.hocon:ro
+      - ./local-secure/acl.conf:/opt/emqx/etc/acl.conf:ro
+      - ./local-secure/auth-built-in-db-bootstrap.csv:/opt/emqx/etc/auth-built-in-db-bootstrap.csv:ro
+      - emqx-secure-data:/opt/emqx/data
+      - emqx-secure-log:/opt/emqx/log
+
+volumes:
+  emqx-secure-data:
+  emqx-secure-log:

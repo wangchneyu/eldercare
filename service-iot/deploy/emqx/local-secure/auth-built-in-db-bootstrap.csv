@@ -1,0 +1,4 @@
+user_id,password,is_superuser
+iot-service,local-only-iot-service-password,false
+device-001,local-only-device-001-password,false
+device-002,local-only-device-002-password,false

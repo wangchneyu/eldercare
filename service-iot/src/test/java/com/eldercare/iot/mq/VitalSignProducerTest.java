@@ -38,6 +38,8 @@ class VitalSignProducerTest {
     ScheduledExecutorService iotRetryScheduler;
     @Mock
     IotMetrics metrics;
+    @Mock
+    VitalDeliveryOutboxService vitalDeliveryOutboxService;
     @Spy
     ObjectMapper objectMapper = new ObjectMapper();
 
@@ -164,6 +166,31 @@ class VitalSignProducerTest {
         assertEquals(10_000L, delayCaptor.getAllValues().get(0));
         assertEquals(30_000L, delayCaptor.getAllValues().get(1));
         assertEquals(60_000L, delayCaptor.getAllValues().get(2));
+        verify(vitalDeliveryOutboxService).captureFinalFailure(any(VitalDeliveryMessage.class), eq(4), any(Throwable.class));
+    }
+
+    @Test
+    void exhaustedForegroundRetries_persistsTheSameFrozenC04EnvelopeOnce() throws Exception {
+        ParsedVitalSign event = vitalSign("EVT-PERSIST");
+        doAnswer(invocation -> {
+            SendCallback callback = invocation.getArgument(2, SendCallback.class);
+            callback.onException(new RuntimeException("mq down"));
+            return null;
+        }).when(rocketMQTemplate).asyncSend(anyString(), any(Message.class), any(SendCallback.class), anyLong());
+        doAnswer(invocation -> {
+            invocation.getArgument(0, Runnable.class).run();
+            return null;
+        }).when(iotRetryScheduler).schedule(any(Runnable.class), anyLong(), eq(TimeUnit.MILLISECONDS));
+
+        producer.send(event);
+
+        ArgumentCaptor<VitalDeliveryMessage> deliveryCaptor = ArgumentCaptor.forClass(VitalDeliveryMessage.class);
+        verify(vitalDeliveryOutboxService).captureFinalFailure(deliveryCaptor.capture(), eq(4), any(Throwable.class));
+        VitalDeliveryMessage delivery = deliveryCaptor.getValue();
+        assertEquals("EVT-PERSIST", delivery.eventId());
+        assertEquals("DEV", delivery.deviceId());
+        assertEquals("MATTRESS", delivery.deviceType());
+        assertEquals("EVT-PERSIST", objectMapper.readValue(delivery.rawEnvelopeJson(), Map.class).get("eventId"));
     }
 
     private ParsedVitalSign vitalSign(String eventId) {

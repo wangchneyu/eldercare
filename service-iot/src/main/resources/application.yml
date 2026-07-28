@@ -75,6 +75,16 @@ rocketmq:
 iot:
   care-validation:
     mock-scenario: ${IOT_CARE_MOCK_SCENARIO:active}
+  vital-delivery:
+    max-age-hours: ${IOT_VITAL_DELIVERY_MAX_AGE_HOURS:24}
+    retry:
+      batch-size: ${IOT_VITAL_DELIVERY_RETRY_BATCH_SIZE:100}
+      fixed-delay-ms: ${IOT_VITAL_DELIVERY_RETRY_FIXED_DELAY_MS:30000}
+      lease-minutes: ${IOT_VITAL_DELIVERY_RETRY_LEASE_MINUTES:5}
+      backoff-seconds: ${IOT_VITAL_DELIVERY_RETRY_BACKOFF_SECONDS:300}
+    terminal-retention-hours: ${IOT_VITAL_DELIVERY_TERMINAL_RETENTION_HOURS:168}
+    cleanup:
+      fixed-delay-ms: ${IOT_VITAL_DELIVERY_CLEANUP_FIXED_DELAY_MS:3600000}
 
 spring.cloud.openfeign:
   client:

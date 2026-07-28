@@ -26,6 +26,8 @@ public class IotMetrics {
     private final AtomicInteger mqttConnectionCount = new AtomicInteger();
     private final AtomicLong outboxPendingCount = new AtomicLong();
     private final AtomicLong outboxOldestAgeSeconds = new AtomicLong();
+    private final AtomicLong vitalDeliveryPendingCount = new AtomicLong();
+    private final AtomicLong vitalDeliveryOldestAgeSeconds = new AtomicLong();
 
     public IotMetrics(MeterRegistry meterRegistry) {
         this.meterRegistry = meterRegistry;
@@ -37,6 +39,12 @@ public class IotMetrics {
                 .register(meterRegistry);
         Gauge.builder("iot_outbox_oldest_age_seconds", outboxOldestAgeSeconds, AtomicLong::get)
                 .description("Cached age of the oldest pending Outbox record")
+                .register(meterRegistry);
+        Gauge.builder("iot_vital_delivery_pending_count", vitalDeliveryPendingCount, AtomicLong::get)
+                .description("Cached count of C04 failure-only delivery records")
+                .register(meterRegistry);
+        Gauge.builder("iot_vital_delivery_oldest_age_seconds", vitalDeliveryOldestAgeSeconds, AtomicLong::get)
+                .description("Cached age of the oldest C04 failure-only delivery record")
                 .register(meterRegistry);
     }
 
@@ -138,6 +146,27 @@ public class IotMetrics {
     public void updateOutboxSnapshot(long pendingCount, Long oldestAgeSeconds) {
         outboxPendingCount.set(Math.max(0, pendingCount));
         outboxOldestAgeSeconds.set(Math.max(0, oldestAgeSeconds == null ? 0 : oldestAgeSeconds));
+    }
+
+    public void vitalDeliverySaved(String deviceType) {
+        counter("iot_vital_delivery_outbox_total", "status", "saved", "device_type", tagValue(deviceType)).increment();
+    }
+
+    public void vitalDeliveryDuplicate(String deviceType) {
+        counter("iot_vital_delivery_outbox_total", "status", "duplicate", "device_type", tagValue(deviceType)).increment();
+    }
+
+    public void vitalDeliveryRetried(String deviceType) {
+        counter("iot_vital_delivery_retry_total", "device_type", tagValue(deviceType)).increment();
+    }
+
+    public void vitalDeliveryQuarantined(String deviceType) {
+        counter("iot_vital_delivery_outbox_total", "status", "quarantined", "device_type", tagValue(deviceType)).increment();
+    }
+
+    public void updateVitalDeliverySnapshot(long pendingCount, Long oldestAgeSeconds) {
+        vitalDeliveryPendingCount.set(Math.max(0, pendingCount));
+        vitalDeliveryOldestAgeSeconds.set(Math.max(0, oldestAgeSeconds == null ? 0 : oldestAgeSeconds));
     }
 
     public void bindDeviceStatusGauges(Supplier<Number> onlineCount,

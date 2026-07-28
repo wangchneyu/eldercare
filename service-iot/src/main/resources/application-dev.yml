@@ -19,8 +19,8 @@ spring:
 mqtt:
   broker-url: tcp://localhost:1883
   client-id: iot-service-dev
-  username: ""
-  password: ""
+  username: ${IOT_MQTT_USERNAME:}
+  password: ${IOT_MQTT_PASSWORD:}
 
 # RocketMQ（本地 Docker）
 rocketmq:

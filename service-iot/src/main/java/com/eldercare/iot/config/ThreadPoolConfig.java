@@ -79,6 +79,15 @@ public class ThreadPoolConfig {
         return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-mq-flush-1"));
     }
 
+    /**
+     * C04 failure-only outbox retry is intentionally isolated from P0 Outbox
+     * scanning and from the short 10s/30s/60s foreground retry scheduler.
+     */
+    @Bean(name = "iotVitalDeliveryRetryScheduler", destroyMethod = "shutdownNow")
+    public ScheduledExecutorService iotVitalDeliveryRetryScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-vital-delivery-retry-1"));
+    }
+
     @Bean(name = "iotHeartbeatScanScheduler", destroyMethod = "shutdownNow")
     public ScheduledExecutorService iotHeartbeatScanScheduler() {
         return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-heartbeat-scan-1"));

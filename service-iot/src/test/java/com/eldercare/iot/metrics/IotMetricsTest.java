@@ -30,11 +30,14 @@ class IotMetricsTest {
     void mqttConnectionAndOutboxGaugesExposeCachedRuntimeState() {
         metrics.mqttConnected(true);
         metrics.updateOutboxSnapshot(3, 17L);
+        metrics.updateVitalDeliverySnapshot(2, 8L);
 
         assertEquals(1.0, registry.get("iot_mqtt_connection_count").gauge().value());
         assertEquals(1.0, registry.get("iot_mqtt_reconnect_total").counter().count());
         assertEquals(3.0, registry.get("iot_outbox_pending_count").gauge().value());
         assertEquals(17.0, registry.get("iot_outbox_oldest_age_seconds").gauge().value());
+        assertEquals(2.0, registry.get("iot_vital_delivery_pending_count").gauge().value());
+        assertEquals(8.0, registry.get("iot_vital_delivery_oldest_age_seconds").gauge().value());
 
         metrics.mqttDisconnected();
         assertEquals(0.0, registry.get("iot_mqtt_connection_count").gauge().value());
