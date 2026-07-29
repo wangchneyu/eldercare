@@ -12,6 +12,7 @@ import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
 import com.eldercare.iot.mapper.IotMqOutboxMapper;
+import com.eldercare.iot.mq.OutboxRetryTask;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Counter;
@@ -44,6 +45,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -60,7 +62,10 @@ import static org.mockito.Mockito.when;
         "mqtt.broker-url=tcp://localhost:1883",
         "mqtt.client-id=iot-service-e2e",
         "mqtt.topics[0]=elder/+/+/+/up/+",
-        "mqtt.qos[0]=1"
+        "mqtt.qos[0]=1",
+        "iot.outbox.initial-lease-seconds=1",
+        "iot.outbox.retry.base-backoff-seconds=1",
+        "iot.outbox.retry.fixed-delay-ms=60000"
 })
 @ActiveProfiles("test")
 @Import(IntegrationTestConfig.class)
@@ -69,6 +74,8 @@ class MqttP0EmqxIntegrationTest {
 
     @Autowired
     private MqttConnectionManager connectionManager;
+    @Autowired
+    private OutboxRetryTask outboxRetryTask;
     @Autowired
     private IotDeviceModelMapper modelMapper;
     @Autowired
@@ -119,7 +126,7 @@ class MqttP0EmqxIntegrationTest {
 
         String deviceId = "E2E-" + UUID.randomUUID();
         String messageId = "MSG-" + UUID.randomUUID();
-        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+        createActiveSosButtonDevice(deviceId);
         double acknowledgementsBefore = ackCount();
 
         publishQos1(deviceId, messageId);
@@ -150,7 +157,7 @@ class MqttP0EmqxIntegrationTest {
 
         String deviceId = "DEDUP-" + UUID.randomUUID();
         String messageId = "MSG-" + UUID.randomUUID();
-        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+        createActiveSosButtonDevice(deviceId);
         double acknowledgementsBefore = ackCount();
 
         publishQos1(deviceId, messageId);
@@ -173,13 +180,58 @@ class MqttP0EmqxIntegrationTest {
     }
 
     @Test
+    void qos1Sos_staysPendingAfterSendFailure_andRecoversThroughLeaseRetry() throws Exception {
+        await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
+
+        AtomicInteger sendAttempts = new AtomicInteger();
+        List<String> sentBodies = new ArrayList<>();
+        when(rocketMQTemplate.syncSend(anyString(), any(Message.class), anyLong())).thenAnswer(invocation -> {
+            Message<?> message = invocation.getArgument(1, Message.class);
+            sentBodies.add((String) message.getPayload());
+            if (sendAttempts.incrementAndGet() <= 3) {
+                throw new RuntimeException("controlled local RocketMQ failure");
+            }
+            SendResult result = new SendResult();
+            result.setSendStatus(SendStatus.SEND_OK);
+            return result;
+        });
+
+        String deviceId = "RECOVER-" + UUID.randomUUID();
+        String messageId = "MSG-" + UUID.randomUUID();
+        createActiveSosButtonDevice(deviceId);
+        double acknowledgementsBefore = ackCount();
+
+        publishQos1(deviceId, messageId);
+        IotMqOutbox outbox = awaitOutbox(deviceId, messageId);
+        outboxId = outbox.getId();
+        String frozenEnvelope = outbox.getRawEnvelopeJson();
+
+        await(() -> {
+            IotMqOutbox current = outboxMapper.selectById(outboxId);
+            return current != null && "PENDING".equals(current.getStatus()) && current.getRetryCount() == 3;
+        }, 10_000, "recoverable send failure must keep the P0 Outbox PENDING");
+        await(() -> ackCount() == acknowledgementsBefore + 1, 10_000,
+                "MQTT message must be acknowledged after the Outbox transaction commits");
+
+        Thread.sleep(1_500);
+        outboxRetryTask.retryPending();
+        await(() -> "SENT".equals(outboxMapper.selectById(outboxId).getStatus()), 10_000,
+                "expired lease was not reclaimed and sent by the retry task");
+
+        assertEquals(4, sendAttempts.get(), "three foreground attempts plus one recovery attempt are expected");
+        assertEquals(4, sentBodies.size());
+        assertTrue(sentBodies.stream().allMatch(frozenEnvelope::equals),
+                "foreground and recovery sends must reuse the persisted C05 envelope byte-for-byte");
+    }
+
+    @Test
     void qos1UnboundSos_isPersistedWithExplicitNullElderId() throws Exception {
         await(connectionManager::isConnected, 10_000, "service-iot did not connect to EMQX");
         stubRocketMqSuccess();
 
         String deviceId = "UNBOUND-" + UUID.randomUUID();
         String messageId = "MSG-" + UUID.randomUUID();
-        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+        createActiveSosButtonDevice(deviceId);
 
         publishQos1(deviceId, messageId);
 
@@ -269,6 +321,11 @@ class MqttP0EmqxIntegrationTest {
         assertEquals(1, instanceMapper.insert(instance));
     }
 
+    private void createActiveSosButtonDevice(String deviceId) {
+        createActiveSimulatorDevice(deviceId, "SOS_BUTTON", 15);
+        createLocationBinding(deviceId, "LOC-DEFAULT-" + UUID.randomUUID(), "Default Test Location");
+    }
+
     private IotDeviceBinding createLocationBinding(String deviceId, String locationId, String locationName) {
         IotDeviceBinding binding = new IotDeviceBinding();
         binding.setId(IdWorker.getId());
@@ -294,7 +351,7 @@ class MqttP0EmqxIntegrationTest {
     }
 
     private void publishQos1(String deviceId, String messageId) throws Exception {
-        String topic = "elder/P001/SOS_BUTTON/" + deviceId + "/up/alert";
+        String topic = "elder/P001/SOS_BUTTON/" + deviceId + "/up/event";
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("messageId", messageId);
         payload.put("deviceId", deviceId);

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://eldercare.local/contracts/iot/c04-elder-vital-raw-v1.schema.json",
+  "title": "C04 elder-vital-raw v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["eventId", "eventType", "schemaVersion", "occurredAt", "traceId", "producer", "payload"],
+  "properties": {
+    "eventId": { "type": "string", "pattern": "^[0-9]+$" },
+    "eventType": { "const": "VITAL_SIGN_REPORTED" },
+    "schemaVersion": { "const": 1 },
+    "occurredAt": { "type": "string", "format": "date-time" },
+    "traceId": { "type": "string", "minLength": 1 },
+    "producer": { "const": "service-iot@1.0.0" },
+    "payload": {
+      "type": "object",
+      "required": ["sourceMessageId", "device_id", "elder_id", "data_time"],
+      "properties": {
+        "sourceMessageId": { "type": "string", "minLength": 1 },
+        "device_id": { "type": "string", "minLength": 1 },
+        "elder_id": { "type": ["string", "null"] },
+        "data_time": { "type": "integer", "minimum": 0 },
+        "heart_rate": { "type": "integer" },
+        "respiratory_rate": { "type": "integer" },
+        "body_movement": { "type": "integer" },
+        "bed_status": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
+  },
+  "x-rocketmq": {
+    "topic": "elder-vital-raw",
+    "tag": "deviceType"
+  }
+}

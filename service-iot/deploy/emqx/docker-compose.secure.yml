@@ -8,6 +8,11 @@ services:
       - "1885:1883"
       - "18085:18083"
       - "8085:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "emqx ctl status"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
     volumes:
       - ./local-secure/base.hocon:/opt/emqx/etc/base.hocon:ro
       - ./local-secure/acl.conf:/opt/emqx/etc/acl.conf:ro

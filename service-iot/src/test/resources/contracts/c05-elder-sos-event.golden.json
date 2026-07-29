@@ -1,0 +1,27 @@
+{
+  "eventId": "123456789012346",
+  "eventType": "SOS_TRIGGERED",
+  "schemaVersion": 1,
+  "occurredAt": "2026-07-24T02:31:00Z",
+  "traceId": "trace-c05-001",
+  "producer": "service-iot@1.0.0",
+  "payload": {
+    "sourceMessageId": "mqtt-sos-001",
+    "deviceId": "SOS-BUTTON-001",
+    "deviceType": "SOS_BUTTON",
+    "elderId": null,
+    "bindingId": null,
+    "parkId": "P001",
+    "buildingId": "B001",
+    "roomId": null,
+    "roomNo": null,
+    "locationBindingId": "LOC-BIND-001",
+    "location": {
+      "locationId": "LOC-001",
+      "locationType": "PUBLIC_AREA",
+      "locationName": "Rehabilitation Area"
+    },
+    "triggerType": "BUTTON_PRESS",
+    "batteryLevel": 85
+  }
+}

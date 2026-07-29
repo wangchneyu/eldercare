@@ -15,7 +15,7 @@
 
     <properties>
         <mybatis-plus-boot3.version>3.5.7</mybatis-plus-boot3.version>
-        <rocketmq-starter.version>2.2.3</rocketmq-starter.version>
+        <rocketmq-starter.version>2.3.5</rocketmq-starter.version>
         <disruptor.version>4.0.0</disruptor.version>
         <paho-mqtt.version>1.2.5</paho-mqtt.version>
     </properties>

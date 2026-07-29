@@ -1,0 +1,42 @@
+groups:
+  - name: service-iot-local-operational-rules
+    rules:
+      - alert: IotP0OutboxBacklog
+        expr: max by (application, instance) (iot_outbox_pending_count) > 0
+        for: 2m
+        labels:
+          severity: critical
+          service: service-iot
+        annotations:
+          summary: P0 Outbox has pending records
+          description: Investigate the P0 Outbox, RocketMQ availability, and retry logs. Do not manually mark recoverable records FAILED.
+
+      - alert: IotP0OutboxOldestRecord
+        expr: max by (application, instance) (iot_outbox_oldest_age_seconds) > 120
+        for: 1m
+        labels:
+          severity: critical
+          service: service-iot
+        annotations:
+          summary: P0 Outbox recovery delay is above the local operational threshold
+          description: This is an IoT-side recovery signal, not proof of the end-to-end P0 SLO.
+
+      - alert: IotVitalFailureOnlyBacklog
+        expr: max by (application, instance) (iot_vital_delivery_pending_count) > 0
+        for: 15m
+        labels:
+          severity: warning
+          service: service-iot
+        annotations:
+          summary: C04 failure-only delivery records require attention
+          description: Confirm retry progress and follow the C16 isolation and backfill procedure once it is frozen.
+
+      - alert: IotMqttDisconnected
+        expr: max by (application, instance) (iot_mqtt_connection_count) == 0
+        for: 2m
+        labels:
+          severity: warning
+          service: service-iot
+        annotations:
+          summary: service-iot has no active MQTT connection
+          description: Check EMQX availability, TLS trust, credentials, ACLs, and network policy.
