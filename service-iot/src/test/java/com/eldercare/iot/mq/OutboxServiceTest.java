@@ -27,6 +27,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.*;
 
 /**
@@ -151,7 +152,7 @@ class OutboxServiceTest {
     @Test
     void markSent_updatesStatusConditionally() {
         when(outboxMapper.updateStatusConditionally(eq("EVT-1"), eq(OutboxStatus.SENT.getCode()),
-                eq(OutboxStatus.PENDING.getCode()), any(OffsetDateTime.class))).thenReturn(1);
+                eq(OutboxStatus.PENDING.getCode()), any(OffsetDateTime.class), isNull())).thenReturn(1);
 
         assertTrue(outboxService.markSent("EVT-1"));
     }
@@ -159,7 +160,7 @@ class OutboxServiceTest {
     @Test
     void markSent_conflict_reportsMetric() {
         when(outboxMapper.updateStatusConditionally(eq("EVT-1"), eq(OutboxStatus.SENT.getCode()),
-                eq(OutboxStatus.PENDING.getCode()), any(OffsetDateTime.class))).thenReturn(0);
+                eq(OutboxStatus.PENDING.getCode()), any(OffsetDateTime.class), isNull())).thenReturn(0);
 
         assertFalse(outboxService.markSent("EVT-1"));
         verify(metrics).outboxStatusConflict("EVT-1", OutboxStatus.PENDING.getCode(), "unknown");
@@ -167,10 +168,24 @@ class OutboxServiceTest {
 
     @Test
     void recordFailure_incrementsRetryCount_andKeepsPending() {
-        when(outboxMapper.updateFailureConditionally("EVT-1", OutboxStatus.PENDING.getCode(),
-                OutboxStatus.PENDING.getCode(), 3, "mq timeout")).thenReturn(1);
+        when(outboxMapper.updateFailureConditionally(eq("EVT-1"), eq(OutboxStatus.PENDING.getCode()),
+                eq(OutboxStatus.PENDING.getCode()), eq(3), eq("mq timeout"), any(OffsetDateTime.class), isNull())).thenReturn(1);
 
         assertTrue(outboxService.recordFailure("EVT-1", 3, "mq timeout"));
+    }
+
+    @Test
+    void c05ElderId_isSerializedAsDecimalString() throws Exception {
+        stubTransactionManager();
+        when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(1);
+
+        outboxService.handleSosEvent(sosEvent("SOS_TRIGGERED"));
+
+        ArgumentCaptor<IotMqOutbox> captor = ArgumentCaptor.forClass(IotMqOutbox.class);
+        verify(outboxMapper).insertOnConflict(captor.capture());
+        var payload = objectMapper.readTree(captor.getValue().getRawEnvelopeJson()).path("payload");
+        assertTrue(payload.path("elderId").isTextual());
+        assertEquals("123", payload.path("elderId").asText());
     }
 
     @Test

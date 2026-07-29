@@ -18,6 +18,7 @@ public class DeviceVO {
     private String mqttClientId;
     private String lifecycleStatus;
     private String onlineStatus;
+    private Integer version;
     private OffsetDateTime lastHeartbeatAt;
     private OffsetDateTime createdAt;
 }

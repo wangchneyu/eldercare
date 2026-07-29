@@ -21,14 +21,14 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             INSERT INTO iot_mq_outbox (
                 id, event_id, device_id, source_message_id, event_type,
                 topic, tag, payload, raw_envelope, raw_envelope_json, status, retry_count,
-                last_error, created_at, sent_at, lease_expire_at, claimed_by
+                last_error, created_at, sent_at, next_retry_at, lease_expire_at, claimed_by
             ) VALUES (
                 #{id}, #{eventId}, #{deviceId}, #{sourceMessageId}, #{eventType},
                 #{topic}, #{tag},
                 #{payload, typeHandler=com.eldercare.iot.config.JsonbTypeHandler},
                 #{rawEnvelope, typeHandler=com.eldercare.iot.config.JsonbTypeHandler},
                 #{rawEnvelopeJson}, #{status}, #{retryCount}, #{lastError}, #{createdAt}, #{sentAt},
-                #{leaseExpireAt}, #{claimedBy}
+                #{nextRetryAt}, #{leaseExpireAt}, #{claimedBy}
             )
             ON CONFLICT (device_id, source_message_id, event_type) DO NOTHING
             """)
@@ -47,11 +47,13 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
                 claimed_by = NULL
             WHERE event_id = #{eventId}
               AND status = #{expectedStatus}
+              AND claimed_by IS NOT DISTINCT FROM #{claimedBy}
             """)
     int updateStatusConditionally(@Param("eventId") String eventId,
                                   @Param("newStatus") String newStatus,
                                   @Param("expectedStatus") String expectedStatus,
-                                  @Param("sentAt") OffsetDateTime sentAt);
+                                  @Param("sentAt") OffsetDateTime sentAt,
+                                  @Param("claimedBy") String claimedBy);
 
     /**
      * 条件更新失败信息：仅在当前状态等于 expectedStatus 时更新 retry_count/last_error/status。
@@ -61,16 +63,20 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             SET status = #{newStatus},
                 retry_count = #{retryCount},
                 last_error = #{lastError},
+                next_retry_at = #{nextRetryAt},
                 lease_expire_at = NULL,
                 claimed_by = NULL
             WHERE event_id = #{eventId}
               AND status = #{expectedStatus}
+              AND claimed_by IS NOT DISTINCT FROM #{claimedBy}
             """)
     int updateFailureConditionally(@Param("eventId") String eventId,
                                    @Param("newStatus") String newStatus,
                                    @Param("expectedStatus") String expectedStatus,
                                    @Param("retryCount") int retryCount,
-                                   @Param("lastError") String lastError);
+                                   @Param("lastError") String lastError,
+                                   @Param("nextRetryAt") OffsetDateTime nextRetryAt,
+                                   @Param("claimedBy") String claimedBy);
 
     /**
      * 原子领取 PENDING 记录：
@@ -82,6 +88,7 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             WITH claimed AS (
                 SELECT id FROM iot_mq_outbox
                 WHERE status = 'PENDING'
+                  AND next_retry_at <= #{now}
                   AND (lease_expire_at IS NULL OR lease_expire_at < #{now})
                 ORDER BY created_at
                 LIMIT #{limit}
@@ -94,7 +101,7 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             WHERE o.id = claimed.id
             RETURNING o.id, o.event_id, o.device_id, o.source_message_id, o.event_type,
                       o.topic, o.tag, o.payload, o.raw_envelope, o.raw_envelope_json, o.status, o.retry_count,
-                      o.last_error, o.created_at, o.sent_at, o.lease_expire_at, o.claimed_by
+                      o.last_error, o.created_at, o.sent_at, o.next_retry_at, o.lease_expire_at, o.claimed_by
             """)
     @Results({
             @Result(property = "id", column = "id"),
@@ -112,6 +119,7 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             @Result(property = "lastError", column = "last_error"),
             @Result(property = "createdAt", column = "created_at"),
             @Result(property = "sentAt", column = "sent_at"),
+            @Result(property = "nextRetryAt", column = "next_retry_at"),
             @Result(property = "leaseExpireAt", column = "lease_expire_at"),
             @Result(property = "claimedBy", column = "claimed_by")
     })

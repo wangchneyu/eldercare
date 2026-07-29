@@ -23,6 +23,9 @@ spring:
     serialization:
       write-dates-as-timestamps: false
     default-property-inclusion: non_null
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
 
 # MyBatis-Plus
 mybatis-plus:
@@ -61,6 +64,8 @@ mqtt:
     - elder/+/+/+/up/+
   qos:
     - 1
+  max-past-seconds: ${MQTT_MAX_PAST_SECONDS:86400}
+  max-future-seconds: ${MQTT_MAX_FUTURE_SECONDS:300}
 
 # RocketMQ（通用配置，dev 环境覆盖）
 rocketmq:
@@ -73,6 +78,17 @@ rocketmq:
 
 # care-service 长者校验。C07 的按 elderId 查询契约冻结前，仅允许 Mock。
 iot:
+  outbox:
+    initial-lease-seconds: ${IOT_OUTBOX_INITIAL_LEASE_SECONDS:60}
+    retry:
+      batch-size: ${IOT_OUTBOX_RETRY_BATCH_SIZE:100}
+      fixed-delay-ms: ${IOT_OUTBOX_RETRY_FIXED_DELAY_MS:10000}
+      lease-minutes: ${IOT_OUTBOX_RETRY_LEASE_MINUTES:5}
+      base-backoff-seconds: ${IOT_OUTBOX_RETRY_BASE_BACKOFF_SECONDS:10}
+      max-backoff-seconds: ${IOT_OUTBOX_RETRY_MAX_BACKOFF_SECONDS:300}
+  idempotency:
+    ttl-seconds: ${IOT_IDEMPOTENCY_TTL_SECONDS:86400}
+    lock-seconds: ${IOT_IDEMPOTENCY_LOCK_SECONDS:30}
   care-validation:
     mock-scenario: ${IOT_CARE_MOCK_SCENARIO:active}
   vital-delivery:

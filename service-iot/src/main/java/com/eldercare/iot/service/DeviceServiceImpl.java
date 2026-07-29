@@ -83,8 +83,9 @@ public class DeviceServiceImpl implements IDeviceService {
         instance.setDeviceName(request.getDeviceName());
         instance.setModelId(request.getModelId());
         instance.setMqttClientId(request.getMqttClientId());
-        instance.setLifecycleStatus("ACTIVE");
+        instance.setLifecycleStatus("SOS_BUTTON".equals(model.getDeviceType()) ? "DISABLED" : "ACTIVE");
         instance.setOnlineStatus("UNKNOWN");
+        instance.setVersion(0);
         instance.setCreatedAt(OffsetDateTime.now());
         instance.setUpdatedAt(OffsetDateTime.now());
 
@@ -227,25 +228,35 @@ public class DeviceServiceImpl implements IDeviceService {
         String current = instance.getLifecycleStatus();
         String target = request.getTargetStatus();
 
+        if (!Objects.equals(instance.getVersion(), request.getVersion())) {
+            throw new BizException(IotErrorCode.DEVICE_VERSION_CONFLICT);
+        }
+
         // 校验状态转换规则
         validateTransition(current, target);
+        IotDeviceModel model = modelMapper.selectById(instance.getModelId());
+        if ("ACTIVE".equals(target) && model != null && "SOS_BUTTON".equals(model.getDeviceType())) {
+            requireActiveLocationBinding(deviceId);
+        }
 
         // 乐观锁：以当前 lifecycleStatus 作为条件，防止并发覆盖
         LambdaUpdateWrapper<IotDeviceInstance> updateWrapper = new LambdaUpdateWrapper<>();
         updateWrapper.eq(IotDeviceInstance::getDeviceId, deviceId)
                      .eq(IotDeviceInstance::getLifecycleStatus, current)
+                     .eq(IotDeviceInstance::getVersion, request.getVersion())
                      .set(IotDeviceInstance::getLifecycleStatus, target)
+                     .set(IotDeviceInstance::getVersion, request.getVersion() + 1)
                      .set(IotDeviceInstance::getUpdatedAt, OffsetDateTime.now());
 
         int rows = instanceMapper.update(null, updateWrapper);
         if (rows == 0) {
-            throw new BizException(IotErrorCode.DEVICE_STATUS_NOT_ALLOWED);
+            throw new BizException(IotErrorCode.DEVICE_VERSION_CONFLICT);
         }
 
         // 重新加载并返回
         IotDeviceInstance updated = findByDeviceId(deviceId);
-        IotDeviceModel model = modelMapper.selectById(updated.getModelId());
-        return toVO(updated, model);
+        IotDeviceModel updatedModel = modelMapper.selectById(updated.getModelId());
+        return toVO(updated, updatedModel);
     }
 
     // ==================== getStatus ====================
@@ -325,7 +336,7 @@ public class DeviceServiceImpl implements IDeviceService {
      * <p>
      * 合法转换：
      *   ACTIVE   → DISABLED / RETIRED
-     *   DISABLED → RETIRED
+     *   DISABLED → ACTIVE / RETIRED
      *   RETIRED  → （不可逆，不允许任何转换）
      */
     private void validateTransition(String current, String target) {
@@ -333,7 +344,7 @@ public class DeviceServiceImpl implements IDeviceService {
         if ("ACTIVE".equals(current)) {
             allowed = "DISABLED".equals(target) || "RETIRED".equals(target);
         } else if ("DISABLED".equals(current)) {
-            allowed = "RETIRED".equals(target);
+            allowed = "ACTIVE".equals(target) || "RETIRED".equals(target);
         }
         // RETIRED → 任何状态均不允许
         if (!allowed) {
@@ -352,6 +363,21 @@ public class DeviceServiceImpl implements IDeviceService {
             vo.setDeviceType(model.getDeviceType());
         }
         return vo;
+    }
+
+    private void requireActiveLocationBinding(String deviceId) {
+        List<IotDeviceBinding> locationBindings = bindingMapper.selectList(new LambdaQueryWrapper<IotDeviceBinding>()
+                .eq(IotDeviceBinding::getDeviceId, deviceId)
+                .eq(IotDeviceBinding::getBindingType, "LOCATION")
+                .eq(IotDeviceBinding::getStatus, "ACTIVE"));
+        boolean hasCompleteLocation = locationBindings.stream().anyMatch(binding ->
+                StringUtils.hasText(binding.getParkId())
+                        && StringUtils.hasText(binding.getLocationId())
+                        && StringUtils.hasText(binding.getLocationType())
+                        && StringUtils.hasText(binding.getLocationName()));
+        if (!hasCompleteLocation) {
+            throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
+        }
     }
 
     private DeviceBindingSnapshotRemoteDTO toRemoteBindingSnapshot(IotDeviceBinding binding) {

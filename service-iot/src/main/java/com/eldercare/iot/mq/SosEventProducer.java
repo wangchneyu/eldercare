@@ -49,7 +49,7 @@ public class SosEventProducer {
             json = buildMessageJson(outbox);
         } catch (Exception e) {
             log.error("P0 信封序列化失败: eventId={}", outbox.getEventId(), e);
-            outboxService.markFailed(outbox.getEventId(), "信封序列化失败: " + e.getMessage());
+            outboxService.markFailed(outbox.getEventId(), "信封序列化失败: " + e.getMessage(), outbox.getClaimedBy());
             metrics.mqFailed(outbox.getTopic(), outbox.getTag(), "serialization_failure");
             return;
         }
@@ -66,7 +66,7 @@ public class SosEventProducer {
             try {
                 SendResult sendResult = rocketMQTemplate.syncSend(destination, message, SEND_TIMEOUT_MS);
                 if (sendResult != null && SendStatus.SEND_OK == sendResult.getSendStatus()) {
-                    boolean marked = outboxService.markSent(outbox.getEventId());
+                    boolean marked = outboxService.markSent(outbox.getEventId(), outbox.getClaimedBy());
                     if (marked) {
                         metrics.mqSent(outbox.getTopic(), outbox.getTag());
                         recordP0Latency(outbox);
@@ -89,9 +89,14 @@ public class SosEventProducer {
         // 可恢复 MQ 失败：保持 PENDING，记录重试与错误，交由 OutboxRetryTask 补发
         String error = lastException != null ? lastException.getMessage() : "MQ 返回非 SEND_OK";
         outboxService.recordFailure(outbox.getEventId(), baseRetry + MAX_FRONT_RETRIES,
-                "前台重试 " + MAX_FRONT_RETRIES + " 次失败: " + error);
+                "前台重试 " + MAX_FRONT_RETRIES + " 次失败: " + error, outbox.getClaimedBy());
         metrics.mqFailed(outbox.getTopic(), outbox.getTag(), "send_failure");
         log.error("P0 发送失败进入补偿: eventId={}, retryCount 将递增，保持 PENDING", outbox.getEventId());
+    }
+
+    void markUnrecoverable(IotMqOutbox outbox, String error) {
+        outboxService.markFailed(outbox.getEventId(), error, outbox.getClaimedBy());
+        metrics.mqFailed(outbox.getTopic(), outbox.getTag(), "serialization_failure");
     }
 
     /**

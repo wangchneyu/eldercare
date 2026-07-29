@@ -80,7 +80,7 @@ class SosEventProducerTest {
         producer.send(outbox);
 
         verify(rocketMQTemplate).syncSend(eq("elder-sos-event:FALL"), any(Message.class), eq(3000L));
-        verify(outboxService).markSent("EVT-001");
+        verify(outboxService).markSent("EVT-001", null);
     }
 
     @Test
@@ -88,12 +88,12 @@ class SosEventProducerTest {
         IotMqOutbox outbox = outbox("SOS_TRIGGERED", MqTopicConstants.TAG_SOS);
         when(rocketMQTemplate.syncSend(anyString(), any(Message.class), anyLong()))
                 .thenReturn(sendResult(SendStatus.SEND_OK));
-        when(outboxService.markSent("EVT-001")).thenReturn(true);
+        when(outboxService.markSent("EVT-001", null)).thenReturn(true);
 
         producer.send(outbox);
 
-        verify(outboxService).markSent("EVT-001");
-        verify(outboxService, never()).recordFailure(anyString(), anyInt(), anyString());
+        verify(outboxService).markSent("EVT-001", null);
+        verify(outboxService, never()).recordFailure(anyString(), anyInt(), anyString(), any());
         verify(metrics).mqSent(eq(MqTopicConstants.SOS_EVENT_TOPIC), eq(MqTopicConstants.TAG_SOS));
     }
 
@@ -106,8 +106,8 @@ class SosEventProducerTest {
         producer.send(outbox);
 
         verify(rocketMQTemplate, times(3)).syncSend(anyString(), any(Message.class), eq(3000L));
-        verify(outboxService, never()).markSent(anyString());
-        verify(outboxService).recordFailure(eq("EVT-001"), eq(3), contains("前台重试 3 次失败"));
+        verify(outboxService, never()).markSent(anyString(), any());
+        verify(outboxService).recordFailure(eq("EVT-001"), eq(3), contains("前台重试 3 次失败"), isNull());
         verify(metrics).mqFailed(eq(MqTopicConstants.SOS_EVENT_TOPIC), eq(MqTopicConstants.TAG_SOS), anyString());
     }
 
@@ -119,8 +119,8 @@ class SosEventProducerTest {
 
         producer.send(outbox);
 
-        verify(outboxService, never()).markSent(anyString());
-        verify(outboxService).recordFailure(eq("EVT-001"), eq(3), contains("前台重试 3 次失败"));
+        verify(outboxService, never()).markSent(anyString(), any());
+        verify(outboxService).recordFailure(eq("EVT-001"), eq(3), contains("前台重试 3 次失败"), isNull());
     }
 
     @Test
@@ -136,7 +136,7 @@ class SosEventProducerTest {
         producer.send(outbox);
 
         verify(rocketMQTemplate, never()).syncSend(anyString(), any(Message.class), anyLong());
-        verify(outboxService).markFailed(eq("EVT-BAD"), contains("Outbox rawEnvelopeJson 为空"));
+        verify(outboxService).markFailed(eq("EVT-BAD"), contains("Outbox rawEnvelopeJson 为空"), isNull());
     }
 
     @Test

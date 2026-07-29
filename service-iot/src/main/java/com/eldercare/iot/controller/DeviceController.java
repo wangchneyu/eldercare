@@ -12,9 +12,12 @@ import com.eldercare.iot.dto.vo.DeviceVO;
 
 import java.util.List;
 import com.eldercare.iot.service.IDeviceService;
+import com.eldercare.iot.support.IdempotencyService;
+import com.eldercare.iot.support.IotAuditLogger;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -26,14 +29,23 @@ import org.springframework.web.bind.annotation.*;
 public class DeviceController {
 
     private final IDeviceService deviceService;
+    private final IdempotencyService idempotencyService;
+    private final IotAuditLogger auditLogger;
 
     /**
      * 注册设备
      */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public R<DeviceVO> register(@Valid @RequestBody DeviceRegisterRequest request) {
-        return R.ok(deviceService.register(request));
+    public R<DeviceVO> register(@Valid @RequestBody DeviceRegisterRequest request,
+                                @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                                ServerHttpRequest httpRequest) {
+        DeviceVO device = idempotencyService.execute("device-register", idempotencyKey, request, DeviceVO.class, () -> {
+            DeviceVO created = deviceService.register(request);
+            auditLogger.success("DEVICE_REGISTER", created.getDeviceId(), httpRequest);
+            return created;
+        });
+        return R.ok(device);
     }
 
     /**
@@ -57,8 +69,11 @@ public class DeviceController {
      */
     @PatchMapping("/{deviceId}/lifecycle-status")
     public R<DeviceVO> changeLifecycle(@PathVariable String deviceId,
-                                       @Valid @RequestBody DeviceLifecycleRequest request) {
-        return R.ok(deviceService.changeLifecycle(deviceId, request));
+                                       @Valid @RequestBody DeviceLifecycleRequest request,
+                                       ServerHttpRequest httpRequest) {
+        DeviceVO device = deviceService.changeLifecycle(deviceId, request);
+        auditLogger.success("DEVICE_LIFECYCLE_CHANGE", deviceId, httpRequest);
+        return R.ok(device);
     }
 
     /**

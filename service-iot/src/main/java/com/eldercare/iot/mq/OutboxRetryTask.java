@@ -82,13 +82,7 @@ public class OutboxRetryTask {
             // No persisted original JSON means a retry cannot safely reconstruct C05.
             if (outbox.getRawEnvelopeJson() == null || outbox.getRawEnvelopeJson().isBlank()) {
                 log.error("Outbox rawEnvelopeJson 为空，标记 FAILED: eventId={}", outbox.getEventId());
-                outboxMapper.updateFailureConditionally(
-                        outbox.getEventId(),
-                        OutboxStatus.FAILED.getCode(),
-                        OutboxStatus.PENDING.getCode(),
-                        outbox.getRetryCount() == null ? 0 : outbox.getRetryCount(),
-                        "rawEnvelopeJson 为空，不可恢复"
-                );
+                sosEventProducer.markUnrecoverable(outbox, "rawEnvelopeJson 为空，不可恢复");
                 continue;
             }
 

@@ -95,6 +95,40 @@ class DisruptorEventHandlerTest {
     }
 
     @Test
+    void modelTypeMismatch_dropsMessageBeforeParser() {
+        RawDeviceMessage raw = rawMessage("VITAL_SIGN");
+        IotDeviceModel model = model();
+        model.setDeviceType("RADAR");
+        when(instanceMapper.selectOne(any())).thenReturn(activeInstance());
+        when(modelMapper.selectById(1L)).thenReturn(model);
+
+        handler.onEvent(wrap(raw), 0, false);
+
+        verify(parserRegistry, never()).getParser(any());
+        verify(messagePipeline, never()).handle(any(), any(), any());
+        verify(metrics).mqttMessageRejected("device_type_mismatch");
+    }
+
+    @Test
+    void sosWithoutActiveLocation_isRejected() {
+        RawDeviceMessage raw = rawMessage("SOS");
+        when(instanceMapper.selectOne(any())).thenReturn(activeInstance());
+        when(modelMapper.selectById(1L)).thenReturn(model());
+        ParsedSosEvent parsed = new ParsedSosEvent(
+                raw.eventId(), "msg-1", raw.deviceId(), raw.occurredAt(), raw.traceId(),
+                raw.parkId(), raw.deviceType(), "SOS_TRIGGERED",
+                null, null, null, null, null, null, null, "BUTTON_PRESS", 85, null);
+        DeviceMessageParser parser = mockParser(Optional.of(parsed));
+        when(parserRegistry.getParser("simulator")).thenReturn(Optional.of(parser));
+        when(bindingMapper.selectList(any())).thenReturn(Collections.emptyList());
+
+        handler.onEvent(wrap(raw), 0, false);
+
+        verify(messagePipeline, never()).handle(any(), any(), any());
+        verify(metrics).mqttMessageRejected("missing_location_binding");
+    }
+
+    @Test
     void unsupportedProtocolVersion_dropsMessageWithoutParse() {
         RawDeviceMessage raw = rawMessage("VITAL_SIGN");
         when(instanceMapper.selectOne(any())).thenReturn(activeInstance());
@@ -281,6 +315,7 @@ class DisruptorEventHandlerTest {
         IotDeviceBinding b = new IotDeviceBinding();
         b.setBindingType(BindingType.LOCATION.getCode());
         b.setBindingId("BIND-LOC");
+        b.setParkId("P001");
         b.setLocationId("LOC-001");
         b.setLocationType("PUBLIC_AREA");
         b.setLocationName("三楼活动区");

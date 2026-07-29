@@ -78,7 +78,8 @@ class IotMqOutboxMapperIntegrationTest {
                 outbox.getEventId(),
                 OutboxStatus.SENT.getCode(),
                 OutboxStatus.PENDING.getCode(),
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                outbox.getClaimedBy()
         );
         assertEquals(1, rows);
 
@@ -87,7 +88,8 @@ class IotMqOutboxMapperIntegrationTest {
                 outbox.getEventId(),
                 OutboxStatus.SENT.getCode(),
                 OutboxStatus.PENDING.getCode(),
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                outbox.getClaimedBy()
         );
         assertEquals(0, rowsAgain);
 
@@ -105,7 +107,9 @@ class IotMqOutboxMapperIntegrationTest {
                 OutboxStatus.PENDING.getCode(),
                 OutboxStatus.PENDING.getCode(),
                 3,
-                "mq timeout"
+                "mq timeout",
+                OffsetDateTime.now().plusSeconds(10),
+                outbox.getClaimedBy()
         );
         assertEquals(1, rows);
 
@@ -193,6 +197,7 @@ class IotMqOutboxMapperIntegrationTest {
         outbox.setStatus(OutboxStatus.PENDING.getCode());
         outbox.setRetryCount(0);
         outbox.setCreatedAt(OffsetDateTime.now());
+        outbox.setNextRetryAt(OffsetDateTime.now());
         return outbox;
     }
 }

@@ -7,21 +7,25 @@ import com.eldercare.iot.dto.request.DeviceBindRequest;
 import com.eldercare.iot.dto.vo.DeviceBindingVO;
 import com.eldercare.iot.entity.IotDeviceBinding;
 import com.eldercare.iot.entity.IotDeviceInstance;
+import com.eldercare.iot.entity.IotDeviceModel;
 import com.eldercare.iot.enums.BindingStatus;
 import com.eldercare.iot.enums.BindingType;
 import com.eldercare.iot.enums.IotErrorCode;
 import com.eldercare.iot.enums.LifecycleStatus;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
+import com.eldercare.iot.mapper.IotDeviceModelMapper;
 import com.eldercare.iot.remote.CareClientCaller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -33,8 +37,12 @@ import java.util.stream.Collectors;
 @Transactional
 public class DeviceBindingServiceImpl implements IDeviceBindingService {
 
+    private static final Set<String> LOCATION_TYPES = Set.of(
+            "ROOM", "CORRIDOR", "PUBLIC_AREA", "BUILDING_ENTRANCE", "OUTDOOR_POINT", "OTHER");
+
     private final IotDeviceBindingMapper bindingMapper;
     private final IotDeviceInstanceMapper deviceMapper;
+    private final IotDeviceModelMapper modelMapper;
     private final CareClientCaller careClientCaller;
 
     @Override
@@ -49,10 +57,6 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
         }
 
         // 2. 校验设备生命周期状态必须为 ACTIVE
-        if (!LifecycleStatus.ACTIVE.getCode().equals(device.getLifecycleStatus())) {
-            throw new BizException(IotErrorCode.DEVICE_STATUS_NOT_ALLOWED);
-        }
-
         // 3. 校验 bindingType 合法性（仅允许 ELDER / LOCATION）
         BindingType bindingType;
         try {
@@ -61,12 +65,26 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
             throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
         }
 
+        if (!LifecycleStatus.ACTIVE.getCode().equals(device.getLifecycleStatus())) {
+            IotDeviceModel model = modelMapper.selectById(device.getModelId());
+            boolean allowPreActivationLocation = LifecycleStatus.DISABLED.getCode().equals(device.getLifecycleStatus())
+                    && bindingType == BindingType.LOCATION
+                    && model != null
+                    && "SOS_BUTTON".equals(model.getDeviceType());
+            if (!allowPreActivationLocation) {
+                throw new BizException(IotErrorCode.DEVICE_STATUS_NOT_ALLOWED);
+            }
+        }
+
         // 4/5. 按类型填充绑定字段
         IotDeviceBinding newBinding = new IotDeviceBinding();
         newBinding.setDeviceId(deviceId);
         newBinding.setBindingType(bindingType.getCode());
 
         if (bindingType == BindingType.ELDER) {
+            if (request.getElderId() == null) {
+                throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
+            }
             careClientCaller.validateActiveElder(request.getElderId());
             newBinding.setElderId(request.getElderId());
             newBinding.setParkId(request.getParkId());
@@ -74,6 +92,17 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
             newBinding.setRoomId(request.getRoomId());
             newBinding.setRoomNo(request.getRoomNo());
         } else {
+            if (!StringUtils.hasText(request.getParkId())
+                    || !StringUtils.hasText(request.getLocationId())
+                    || !StringUtils.hasText(request.getLocationType())
+                    || !StringUtils.hasText(request.getLocationName())
+                    || !LOCATION_TYPES.contains(request.getLocationType())) {
+                throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
+            }
+            newBinding.setParkId(request.getParkId());
+            newBinding.setBuildingId(request.getBuildingId());
+            newBinding.setRoomId(request.getRoomId());
+            newBinding.setRoomNo(request.getRoomNo());
             // LOCATION 绑定
             newBinding.setLocationId(request.getLocationId());
             newBinding.setLocationType(request.getLocationType());

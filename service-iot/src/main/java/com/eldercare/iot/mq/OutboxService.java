@@ -13,13 +13,16 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.OffsetDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * P0 事件发件箱：本地事务写入原始 C05 信封与 Outbox 记录，依靠 PostgreSQL ON CONFLICT 去重。
@@ -36,6 +39,17 @@ public class OutboxService {
     private final PlatformTransactionManager transactionManager;
     private final IotMetrics metrics;
     private final ObjectMapper objectMapper;
+
+    @Value("${iot.outbox.initial-lease-seconds:60}")
+    private long initialLeaseSeconds = 60;
+
+    @Value("${iot.outbox.retry.base-backoff-seconds:10}")
+    private long baseBackoffSeconds = 10;
+
+    @Value("${iot.outbox.retry.max-backoff-seconds:300}")
+    private long maxBackoffSeconds = 300;
+
+    private final String initialClaimedBy = "initial-" + UUID.randomUUID();
 
     public OutboxService(IotMqOutboxMapper outboxMapper,
                          @Lazy SosEventProducer sosEventProducer,
@@ -100,30 +114,37 @@ public class OutboxService {
     /**
      * 标记 SENT：条件更新，仅在当前为 PENDING 时生效，防止并发下被失败路径覆盖。
      */
-    public boolean markSent(String eventId) {
+    public boolean markSent(String eventId, String claimedBy) {
         int rows = outboxMapper.updateStatusConditionally(
                 eventId,
                 OutboxStatus.SENT.getCode(),
                 OutboxStatus.PENDING.getCode(),
-                OffsetDateTime.now()
+                OffsetDateTime.now(),
+                claimedBy
         );
         if (rows == 0) {
             metrics.outboxStatusConflict(eventId, OutboxStatus.PENDING.getCode(), "unknown");
             return false;
         }
         return true;
+    }
+
+    public boolean markSent(String eventId) {
+        return markSent(eventId, null);
     }
 
     /**
      * 记录可恢复失败：条件更新，仅在当前为 PENDING 时递增 retry_count 并保留 PENDING。
      */
-    public boolean recordFailure(String eventId, int retryCount, String error) {
+    public boolean recordFailure(String eventId, int retryCount, String error, String claimedBy) {
         int rows = outboxMapper.updateFailureConditionally(
                 eventId,
                 OutboxStatus.PENDING.getCode(),
                 OutboxStatus.PENDING.getCode(),
                 retryCount,
-                error
+                error,
+                nextRetryAt(retryCount),
+                claimedBy
         );
         if (rows == 0) {
             metrics.outboxStatusConflict(eventId, OutboxStatus.PENDING.getCode(), "unknown");
@@ -132,18 +153,28 @@ public class OutboxService {
         return true;
     }
 
+    public boolean recordFailure(String eventId, int retryCount, String error) {
+        return recordFailure(eventId, retryCount, error, null);
+    }
+
     /**
      * 标记不可恢复 FAILED：条件更新，仅在当前为 PENDING 时生效。
      */
-    public boolean markFailed(String eventId, String error) {
+    public boolean markFailed(String eventId, String error, String claimedBy) {
         int rows = outboxMapper.updateFailureConditionally(
                 eventId,
                 OutboxStatus.FAILED.getCode(),
                 OutboxStatus.PENDING.getCode(),
                 0,
-                error
+                error,
+                OffsetDateTime.now(),
+                claimedBy
         );
         return rows > 0;
+    }
+
+    public boolean markFailed(String eventId, String error) {
+        return markFailed(eventId, error, null);
     }
 
     private IotMqOutbox buildOutbox(ParsedSosEvent event) {
@@ -168,8 +199,20 @@ public class OutboxService {
         outbox.setRawEnvelopeJson(serializeRawEnvelope(rawEnvelope));
         outbox.setStatus(OutboxStatus.PENDING.getCode());
         outbox.setRetryCount(0);
-        outbox.setCreatedAt(OffsetDateTime.now());
+        OffsetDateTime now = OffsetDateTime.now();
+        outbox.setCreatedAt(now);
+        outbox.setNextRetryAt(now);
+        outbox.setClaimedBy(initialClaimedBy);
+        outbox.setLeaseExpireAt(now.plus(Math.max(1, initialLeaseSeconds), ChronoUnit.SECONDS));
         return outbox;
+    }
+
+    private OffsetDateTime nextRetryAt(int retryCount) {
+        long base = baseBackoffSeconds > 0 ? baseBackoffSeconds : 10;
+        long max = maxBackoffSeconds >= base ? maxBackoffSeconds : 300;
+        int exponent = Math.min(Math.max(0, retryCount / SosEventProducer.MAX_FRONT_RETRIES - 1), 20);
+        long delay = Math.min(max, base * (1L << exponent));
+        return OffsetDateTime.now().plus(delay, ChronoUnit.SECONDS);
     }
 
     private void ackInbound(InboundMqttMessage inbound) {
@@ -196,7 +239,7 @@ public class OutboxService {
         payload.put("sourceMessageId", event.sourceMessageId());
         payload.put("deviceId", event.deviceId());
         payload.put("deviceType", event.deviceType());
-        payload.put("elderId", event.elderId());
+        payload.put("elderId", event.elderId() == null ? null : event.elderId().toString());
         payload.put("bindingId", event.bindingId());
         payload.put("parkId", event.parkId());
         payload.put("buildingId", event.buildingId());

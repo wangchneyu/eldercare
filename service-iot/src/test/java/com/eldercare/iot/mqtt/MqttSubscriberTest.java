@@ -5,10 +5,12 @@ import com.eldercare.iot.parser.model.RawDeviceMessage;
 import com.eldercare.iot.pipeline.DisruptorPublisher;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.charset.StandardCharsets;
@@ -35,9 +37,16 @@ class MqttSubscriberTest {
     DisruptorPublisher disruptorPublisher;
     @Mock
     IotMetrics metrics;
+    @Spy
+    MqttConfig mqttConfig = new MqttConfig();
 
     @InjectMocks
     MqttSubscriber subscriber;
+
+    @BeforeEach
+    void widenPastWindowForFixedContractFixtures() {
+        mqttConfig.setMaxPastSeconds(1_000_000);
+    }
 
     @Test
     void initRegistersMessageHandlerAndConnects() {
@@ -158,6 +167,40 @@ class MqttSubscriberTest {
 
         verify(disruptorPublisher, never()).publish(any());
         verify(metrics).mqttMessageRejected("invalid_occurred_at");
+    }
+
+    @Test
+    void topicAndEnvelopeMessageTypeMismatch_isRejected() throws Exception {
+        String topic = "elder/P001/MATTRESS/DEV-001/up/telemetry";
+        JsonNode envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"messageId":"msg-1","deviceId":"DEV-001","messageType":"HEARTBEAT",
+                 "protocolVersion":"1.0","occurredAt":"2026-07-24T02:30:00Z"}
+                """);
+        when(topicRouter.route(topic)).thenReturn(Optional.of(
+                new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
+        when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
+
+        assertEquals(1, dispatch(topic, envelope.toString(), 1, 1));
+
+        verify(disruptorPublisher, never()).publish(any());
+        verify(metrics).mqttMessageRejected("topic_message_type_mismatch");
+    }
+
+    @Test
+    void staleOccurredAt_isRejected() throws Exception {
+        String topic = "elder/P001/MATTRESS/DEV-001/up/telemetry";
+        JsonNode envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree("""
+                {"messageId":"msg-1","deviceId":"DEV-001","messageType":"VITAL_SIGN",
+                 "protocolVersion":"1.0","occurredAt":"2020-01-01T00:00:00Z"}
+                """);
+        when(topicRouter.route(topic)).thenReturn(Optional.of(
+                new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
+        when(messageValidator.validate(any(byte[].class))).thenReturn(Optional.of(envelope));
+
+        assertEquals(1, dispatch(topic, envelope.toString(), 1, 1));
+
+        verify(disruptorPublisher, never()).publish(any());
+        verify(metrics).mqttMessageRejected("occurred_at_out_of_range");
     }
 
     @Test

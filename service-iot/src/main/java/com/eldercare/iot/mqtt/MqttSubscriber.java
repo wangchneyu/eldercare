@@ -31,17 +31,20 @@ public class MqttSubscriber {
     private final MessageValidator messageValidator;
     private final DisruptorPublisher disruptorPublisher;
     private final IotMetrics metrics;
+    private final MqttConfig mqttConfig;
 
     public MqttSubscriber(MqttConnectionManager connectionManager,
                           TopicRouter topicRouter,
                           MessageValidator messageValidator,
                           DisruptorPublisher disruptorPublisher,
-                          IotMetrics metrics) {
+                          IotMetrics metrics,
+                          MqttConfig mqttConfig) {
         this.connectionManager = connectionManager;
         this.topicRouter = topicRouter;
         this.messageValidator = messageValidator;
         this.disruptorPublisher = disruptorPublisher;
         this.metrics = metrics;
+        this.mqttConfig = mqttConfig;
     }
 
     @PostConstruct
@@ -96,6 +99,10 @@ public class MqttSubscriber {
                 rejectAndAck(inbound, "device_id_mismatch");
                 return;
             }
+            if (!matchesTopicMessageType(route.messageType(), messageType)) {
+                rejectAndAck(inbound, "topic_message_type_mismatch");
+                return;
+            }
 
             // ⑤ 生成 eventId（雪花 ID 十进制字符串）
             String eventId = String.valueOf(IdUtil.nextId());
@@ -107,6 +114,12 @@ public class MqttSubscriber {
             } catch (Exception e) {
                 log.warn("occurredAt 非法，拒绝消息: occurredAt={}, traceId={}", occurredAtStr, traceId);
                 rejectAndAck(inbound, "invalid_occurred_at");
+                return;
+            }
+            OffsetDateTime now = OffsetDateTime.now();
+            if (occurredAt.isBefore(now.minusSeconds(mqttConfig.getMaxPastSeconds()))
+                    || occurredAt.isAfter(now.plusSeconds(mqttConfig.getMaxFutureSeconds()))) {
+                rejectAndAck(inbound, "occurred_at_out_of_range");
                 return;
             }
 
@@ -154,5 +167,14 @@ public class MqttSubscriber {
             inbound.ack();
             metrics.mqttMessageAcked(String.valueOf(inbound.qos()));
         }
+    }
+
+    private boolean matchesTopicMessageType(String topicMessageType, String envelopeMessageType) {
+        return switch (topicMessageType) {
+            case "telemetry" -> "VITAL_SIGN".equals(envelopeMessageType);
+            case "event" -> "SOS".equals(envelopeMessageType) || "FALL".equals(envelopeMessageType);
+            case "heartbeat" -> "HEARTBEAT".equals(envelopeMessageType);
+            default -> false;
+        };
     }
 }

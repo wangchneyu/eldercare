@@ -125,11 +125,11 @@ class OutboxServiceIntegrationTest {
                 try {
                     start.await();
                     if (markSent) {
-                        if (outboxService.markSent(outbox.getEventId())) {
+                        if (outboxService.markSent(outbox.getEventId(), outbox.getClaimedBy())) {
                             sentSuccess.incrementAndGet();
                         }
                     } else {
-                        if (outboxService.recordFailure(outbox.getEventId(), 1, "timeout")) {
+                        if (outboxService.recordFailure(outbox.getEventId(), 1, "timeout", outbox.getClaimedBy())) {
                             failureSuccess.incrementAndGet();
                         }
                     }

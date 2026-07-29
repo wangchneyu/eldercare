@@ -8,6 +8,7 @@ import com.eldercare.iot.entity.IotDeviceInstance;
 import com.eldercare.iot.enums.IotErrorCode;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
+import com.eldercare.iot.mapper.IotDeviceModelMapper;
 import com.eldercare.iot.remote.CareClientCaller;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +31,8 @@ class DeviceBindingCareValidationTest {
     @Mock
     IotDeviceInstanceMapper deviceMapper;
     @Mock
+    IotDeviceModelMapper modelMapper;
+    @Mock
     CareClientCaller careClientCaller;
 
     @Test
@@ -39,7 +42,7 @@ class DeviceBindingCareValidationTest {
         doThrow(new BizException(SystemErrorCode.REMOTE_CALL_FAILED))
                 .when(careClientCaller).validateActiveElder(1001L);
         DeviceBindingServiceImpl service = new DeviceBindingServiceImpl(
-                bindingMapper, deviceMapper, careClientCaller);
+                bindingMapper, deviceMapper, modelMapper, careClientCaller);
 
         BizException exception = assertThrows(BizException.class,
                 () -> service.bind("DEV-001", elderRequest()));
@@ -55,7 +58,7 @@ class DeviceBindingCareValidationTest {
         doThrow(new BizException(IotErrorCode.ELDER_NOT_FOUND))
                 .when(careClientCaller).validateActiveElder(1001L);
         DeviceBindingServiceImpl service = new DeviceBindingServiceImpl(
-                bindingMapper, deviceMapper, careClientCaller);
+                bindingMapper, deviceMapper, modelMapper, careClientCaller);
 
         BizException exception = assertThrows(BizException.class,
                 () -> service.bind("DEV-001", elderRequest()));

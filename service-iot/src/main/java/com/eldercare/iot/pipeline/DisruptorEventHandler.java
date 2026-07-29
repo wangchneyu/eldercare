@@ -20,6 +20,7 @@ import com.lmax.disruptor.EventHandler;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 import java.util.HashMap;
 import java.util.List;
@@ -87,6 +88,12 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
             rejectAndAck(raw, "unknown_model");
             return;
         }
+        if (StringUtils.hasText(model.getDeviceType()) && !raw.deviceType().equals(model.getDeviceType())) {
+            log.warn("Topic device type does not match registered model: deviceId={}, topicType={}, modelType={}",
+                    raw.deviceId(), raw.deviceType(), model.getDeviceType());
+            rejectAndAck(raw, "device_type_mismatch");
+            return;
+        }
         DeviceMessageParser parser = parserRegistry.getParser(model.getParserCode()).orElse(null);
         if (parser == null) {
             log.warn("解析器不存在: parserCode={}", model.getParserCode());
@@ -114,6 +121,14 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         // ④ 注入绑定快照
         BindingSnapshot snapshot = loadSnapshot(raw.deviceId(), raw.parkId());
         ParsedEvent enriched = enrich(parsed, snapshot);
+        if (enriched instanceof ParsedSosEvent sos && !hasCompleteLocation(sos)) {
+            rejectAndAck(raw, "missing_location_binding");
+            return;
+        }
+        if (StringUtils.hasText(snapshot.parkId()) && !snapshot.parkId().equals(raw.parkId())) {
+            rejectAndAck(raw, "park_id_mismatch");
+            return;
+        }
 
         // ⑤ 路由到下游
         messagePipeline.handle(enriched, raw, model.getHeartbeatTimeoutSeconds());
@@ -152,6 +167,12 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
                 roomNo = binding.getRoomNo();
             } else if (BindingType.LOCATION.getCode().equals(binding.getBindingType())) {
                 locationBindingId = binding.getBindingId();
+                if (StringUtils.hasText(binding.getParkId())) {
+                    parkId = binding.getParkId();
+                }
+                buildingId = binding.getBuildingId();
+                roomId = binding.getRoomId();
+                roomNo = binding.getRoomNo();
                 Map<String, Object> loc = new HashMap<>();
                 loc.put("locationId", binding.getLocationId());
                 loc.put("locationType", binding.getLocationType());
@@ -188,5 +209,14 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
             raw.ackMqtt();
             metrics.mqttMessageAcked(String.valueOf(raw.mqttQos()));
         }
+    }
+
+    private boolean hasCompleteLocation(ParsedSosEvent event) {
+        if (!StringUtils.hasText(event.locationBindingId()) || !StringUtils.hasText(event.parkId()) || event.location() == null) {
+            return false;
+        }
+        return StringUtils.hasText((String) event.location().get("locationId"))
+                && StringUtils.hasText((String) event.location().get("locationType"))
+                && StringUtils.hasText((String) event.location().get("locationName"));
     }
 }

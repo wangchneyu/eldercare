@@ -238,22 +238,24 @@ class DeviceCrudApiTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.lifecycleStatus").value("DISABLED"));
+            .andExpect(jsonPath("$.data.lifecycleStatus").value("DISABLED"))
+            .andExpect(jsonPath("$.data.version").value(1));
     }
 
     @Test
     @Order(16)
     void device_lifecycle_invalid_transition() throws Exception {
-        // 当前是 DISABLED，尝试回到 ACTIVE（不允许）
+        // 当前是 DISABLED，非 SOS_BUTTON 设备允许重新启用。
         DeviceLifecycleRequest req = new DeviceLifecycleRequest();
         req.setTargetStatus("ACTIVE");
-        req.setVersion(0);
+        req.setVersion(1);
 
         mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
-            .andExpect(status().isConflict())
-            .andExpect(jsonPath("$.code").value(212003));
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.lifecycleStatus").value("ACTIVE"))
+            .andExpect(jsonPath("$.data.version").value(2));
     }
 
     @Test
@@ -261,13 +263,14 @@ class DeviceCrudApiTest {
     void device_lifecycle_retire() throws Exception {
         DeviceLifecycleRequest req = new DeviceLifecycleRequest();
         req.setTargetStatus("RETIRED");
-        req.setVersion(0);
+        req.setVersion(2);
 
         mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.data.lifecycleStatus").value("RETIRED"));
+            .andExpect(jsonPath("$.data.lifecycleStatus").value("RETIRED"))
+            .andExpect(jsonPath("$.data.version").value(3));
     }
 
     @Test
@@ -275,7 +278,7 @@ class DeviceCrudApiTest {
     void device_lifecycle_retired_irreversible() throws Exception {
         DeviceLifecycleRequest req = new DeviceLifecycleRequest();
         req.setTargetStatus("ACTIVE");
-        req.setVersion(0);
+        req.setVersion(3);
 
         mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)

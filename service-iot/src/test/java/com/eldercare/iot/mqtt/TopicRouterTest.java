@@ -46,6 +46,8 @@ class TopicRouterTest {
         "elder/P001/MATTRESS",
         "elder/P001/MATTRESS/DEV-001",
         "elder/P001/MATTRESS/DEV-001/up",
+        "elder/P001/MATTRESS/DEV-001/up/unknown",
+        "elder//MATTRESS/DEV-001/up/telemetry",
         "other/P001/MATTRESS/DEV-001/up/telemetry",
         "elder/P001/MATTRESS/DEV-001/down/telemetry",
         "elder/P001/MATTRESS/DEV-001/up/telemetry/extra"

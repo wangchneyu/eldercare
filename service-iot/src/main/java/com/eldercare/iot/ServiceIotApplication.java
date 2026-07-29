@@ -12,7 +12,12 @@ import org.springframework.scheduling.annotation.EnableScheduling;
  * <p>
  * 物联网接入服务：MQTT 设备接入、协议解析、消息分发。
  */
-@SpringBootApplication(scanBasePackages = "com.eldercare.iot")
+@SpringBootApplication(
+        scanBasePackages = "com.eldercare.iot",
+        excludeName = {
+                "org.redisson.spring.starter.RedissonAutoConfigurationV2",
+                "com.eldercare.common.redis.config.RedisAutoConfiguration"
+        })
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.eldercare")
 @EnableScheduling

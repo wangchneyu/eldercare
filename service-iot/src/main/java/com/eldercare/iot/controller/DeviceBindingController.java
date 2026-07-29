@@ -4,9 +4,12 @@ import com.eldercare.common.core.domain.R;
 import com.eldercare.iot.dto.request.DeviceBindRequest;
 import com.eldercare.iot.dto.vo.DeviceBindingVO;
 import com.eldercare.iot.service.IDeviceBindingService;
+import com.eldercare.iot.support.IdempotencyService;
+import com.eldercare.iot.support.IotAuditLogger;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.server.reactive.ServerHttpRequest;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,6 +23,8 @@ import java.util.List;
 public class DeviceBindingController {
 
     private final IDeviceBindingService deviceBindingService;
+    private final IdempotencyService idempotencyService;
+    private final IotAuditLogger auditLogger;
 
     /**
      * 创建或替换设备绑定
@@ -28,8 +33,15 @@ public class DeviceBindingController {
     @ResponseStatus(HttpStatus.CREATED)
     public R<DeviceBindingVO> bind(
             @PathVariable String deviceId,
-            @Valid @RequestBody DeviceBindRequest request) {
-        DeviceBindingVO vo = deviceBindingService.bind(deviceId, request);
+            @Valid @RequestBody DeviceBindRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            ServerHttpRequest httpRequest) {
+        DeviceBindingVO vo = idempotencyService.execute("device-bind:" + deviceId, idempotencyKey, request,
+                DeviceBindingVO.class, () -> {
+                    DeviceBindingVO created = deviceBindingService.bind(deviceId, request);
+                    auditLogger.success("DEVICE_BIND", deviceId, httpRequest);
+                    return created;
+                });
         return R.ok(vo);
     }
 
@@ -37,8 +49,13 @@ public class DeviceBindingController {
      * 解绑设备当前所有 ACTIVE 绑定
      */
     @DeleteMapping("/current")
-    public R<Void> unbind(@PathVariable String deviceId) {
-        deviceBindingService.unbind(deviceId);
+    public R<Void> unbind(@PathVariable String deviceId,
+                          @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                          ServerHttpRequest httpRequest) {
+        idempotencyService.executeVoid("device-unbind:" + deviceId, idempotencyKey, deviceId, () -> {
+            deviceBindingService.unbind(deviceId);
+            auditLogger.success("DEVICE_UNBIND", deviceId, httpRequest);
+        });
         return R.ok(null);
     }
 

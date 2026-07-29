@@ -57,6 +57,8 @@ public class IotMqOutbox implements Serializable {
 
     private OffsetDateTime sentAt;
 
+    private OffsetDateTime nextRetryAt;
+
     /** 租约过期时间，用于原子 claim/并发控制 */
     private OffsetDateTime leaseExpireAt;
 

@@ -35,6 +35,9 @@ public class IotDeviceInstance implements Serializable {
 
     private String onlineStatus;
 
+    @Version
+    private Integer version;
+
     private OffsetDateTime lastHeartbeatAt;
 
     private OffsetDateTime createdAt;

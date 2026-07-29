@@ -39,6 +39,7 @@ CREATE TABLE iot_device_instance (
     mqtt_client_id      VARCHAR(128)    NOT NULL,
     lifecycle_status    VARCHAR(16)     NOT NULL DEFAULT 'ACTIVE',
     online_status       VARCHAR(16)     DEFAULT 'UNKNOWN',
+    version             INT             NOT NULL DEFAULT 0,
     last_heartbeat_at   TIMESTAMPTZ,
     created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     updated_at          TIMESTAMPTZ,
@@ -105,12 +106,13 @@ CREATE TABLE iot_mq_outbox (
     last_error              TEXT,
     created_at              TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     sent_at                 TIMESTAMPTZ,
+    next_retry_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
 
     CONSTRAINT pk_iot_mq_outbox PRIMARY KEY (id),
     CONSTRAINT uk_outbox_event_id UNIQUE (event_id),
     CONSTRAINT uk_outbox_dedup UNIQUE (device_id, source_message_id, event_type)
 );
-CREATE INDEX idx_outbox_status ON iot_mq_outbox (status, created_at) WHERE status = 'PENDING';
+CREATE INDEX idx_outbox_status ON iot_mq_outbox (status, next_retry_at, created_at) WHERE status = 'PENDING';
 
 COMMENT ON TABLE iot_mq_outbox IS 'P0 事件发件箱——SOS/跌倒事件先落库再同步发送，服务重启后补发未完成记录';
 COMMENT ON COLUMN iot_mq_outbox.status IS 'PENDING / SENT / FAILED';

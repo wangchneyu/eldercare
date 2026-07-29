@@ -18,4 +18,6 @@ public class MqttConfig {
     private String[] topics = {"elder/+/+/+/up/+"};
     private int[] qos = {1};
     private boolean autoConnect = true;
+    private long maxPastSeconds = 86_400;
+    private long maxFutureSeconds = 300;
 }

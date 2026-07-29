@@ -92,13 +92,7 @@ class OutboxRetryTaskTest {
 
         retryTask.retryPending();
 
-        verify(outboxMapper).updateFailureConditionally(
-                eq("EVT-001"),
-                eq(OutboxStatus.FAILED.getCode()),
-                eq(OutboxStatus.PENDING.getCode()),
-                anyInt(),
-                eq("rawEnvelopeJson 为空，不可恢复")
-        );
+        verify(sosEventProducer).markUnrecoverable(eq(outbox), eq("rawEnvelopeJson 为空，不可恢复"));
         verify(sosEventProducer, never()).send(any());
         verify(iotP0Executor, never()).execute(any());
     }
