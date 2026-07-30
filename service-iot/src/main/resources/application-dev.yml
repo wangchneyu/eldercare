@@ -3,6 +3,12 @@
 # ===========================================
 
 spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: false
+      config:
+        enabled: false
   datasource:
     url: jdbc:postgresql://localhost:5432/eldercare_iot?currentSchema=public
     username: postgres

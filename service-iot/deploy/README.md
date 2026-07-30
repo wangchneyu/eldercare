@@ -25,6 +25,18 @@ This verifies PostgreSQL, EMQX, MQTT ACK behavior, C04/C05 assets, Outbox retry 
 the front-end build. It deliberately uses mocked RocketMQ in MQTT smoke tests. It is not proof
 of real RocketMQ delivery, downstream consumption, or end-to-end P0 latency.
 
+The local EMQX service also maps WebSocket MQTT from container port `8083` to host port `8084`.
+This is for the `iot-front` browser simulator at `ws://localhost:8084/mqtt`; it must remain a
+local development endpoint and is not a production MQTT exposure pattern.
+
+For a local interactive `service-iot` run, activate the `dev` profile. It deliberately disables
+Nacos discovery and config because this local Compose fixture does not start Nacos:
+
+```powershell
+cd D:\a康养项目\003\eldercare
+mvn -pl service-iot spring-boot:run "-Dspring-boot.run.profiles=dev"
+```
+
 ## Local RocketMQ Fixture
 
 The separate local RocketMQ fixture is for producer and Outbox recovery verification on a Windows

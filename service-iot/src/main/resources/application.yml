@@ -124,5 +124,5 @@ logging:
 spring:
   config:
     activate:
-      on-profile: "!test"
+      on-profile: "!test & !dev"
     import: "optional:nacos:service-iot.yaml"
