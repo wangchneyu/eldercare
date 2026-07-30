@@ -1,0 +1,49 @@
+name: eldercare-iot-rocketmq
+
+services:
+  namesrv:
+    image: apache/rocketmq:5.3.2
+    container_name: eldercare-rocketmq-namesrv-local
+    command: sh mqnamesrv
+    ports:
+      - "9876:9876"
+    healthcheck:
+      test: ["CMD-SHELL", "sh mqadmin clusterList -n 127.0.0.1:9876 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 30s
+      retries: 30
+
+  store-init:
+    image: apache/rocketmq:5.3.2
+    container_name: eldercare-rocketmq-store-init-local
+    user: "0:0"
+    command: sh -c "mkdir -p /home/rocketmq/store && chown -R 3000:3000 /home/rocketmq/store"
+    volumes:
+      - iot-local-rocketmq-store:/home/rocketmq/store
+
+  broker:
+    image: apache/rocketmq:5.3.2
+    container_name: eldercare-rocketmq-broker-local
+    command: sh mqbroker -n namesrv:9876 -c /home/rocketmq/rocketmq-5.3.2/conf/broker.conf
+    environment:
+      NAMESRV_ADDR: namesrv:9876
+    depends_on:
+      namesrv:
+        condition: service_healthy
+      store-init:
+        condition: service_completed_successfully
+    ports:
+      - "10909:10909"
+      - "10911:10911"
+      - "10912:10912"
+    volumes:
+      - ./rocketmq/broker.conf:/home/rocketmq/rocketmq-5.3.2/conf/broker.conf:ro
+      - iot-local-rocketmq-store:/home/rocketmq/store
+    healthcheck:
+      test: ["CMD-SHELL", "sh mqadmin clusterList -n namesrv:9876 2>/dev/null | grep -Fq 'broker-a'"]
+      interval: 10s
+      timeout: 30s
+      retries: 30
+
+volumes:
+  iot-local-rocketmq-store:
