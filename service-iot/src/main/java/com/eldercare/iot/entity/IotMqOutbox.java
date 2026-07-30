@@ -12,8 +12,8 @@ import java.util.Map;
 /**
  * P0 事件发件箱 — iot_mq_outbox。
  * <p>
- * payload 保存完整的 C05 原始信封（含 eventId/occurredAt/traceId/payload），
- * 首发与补发均直接序列化该信封，禁止在补发时按当前时间重新拼装。
+ * payload 保存 C05 的业务 payload；rawEnvelopeJson 保存创建事务中的完整原始信封。
+ * 首发与补发均直接发送 rawEnvelopeJson，禁止在补发时按当前时间重新拼装。
  */
 @Data
 @TableName(value = "iot_mq_outbox", autoResultMap = true)
