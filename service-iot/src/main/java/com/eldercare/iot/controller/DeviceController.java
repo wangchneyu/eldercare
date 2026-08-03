@@ -24,7 +24,7 @@ import org.springframework.web.bind.annotation.*;
  * 设备实例 REST 控制器
  */
 @RestController
-@RequestMapping("/api/iot/devices")
+@RequestMapping("/iot/devices")
 @RequiredArgsConstructor
 public class DeviceController {
 

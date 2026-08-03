@@ -18,7 +18,7 @@ import java.util.List;
  * 设备绑定管理接口
  */
 @RestController
-@RequestMapping("/api/iot/devices/{deviceId}/bindings")
+@RequestMapping("/iot/devices/{deviceId}/bindings")
 @RequiredArgsConstructor
 public class DeviceBindingController {
 

@@ -1,0 +1,13 @@
+# Shared integration profile: register this local service for Gateway discovery.
+# Keep configuration-center loading disabled until the shared Nacos data contract is confirmed.
+spring:
+  cloud:
+    nacos:
+      discovery:
+        enabled: true
+        server-addr: ${NACOS_SERVER_ADDR:100.64.0.3:8848}
+        namespace: ${NACOS_NAMESPACE:}
+        group: ${NACOS_GROUP:DEFAULT_GROUP}
+        ip: ${NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false

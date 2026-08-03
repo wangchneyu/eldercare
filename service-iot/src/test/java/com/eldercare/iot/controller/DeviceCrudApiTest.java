@@ -63,7 +63,7 @@ class DeviceCrudApiTest {
         req.setHeartbeatTimeoutSeconds(30);
         req.setDescription("CRUD 测试型号");
 
-        MvcResult result = mockMvc.perform(post("/api/iot/device-models")
+        MvcResult result = mockMvc.perform(post("/iot/device-models")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -90,7 +90,7 @@ class DeviceCrudApiTest {
         req.setParserCode("simulator");
         req.setHeartbeatTimeoutSeconds(15);
 
-        mockMvc.perform(post("/api/iot/device-models")
+        mockMvc.perform(post("/iot/device-models")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict())
@@ -100,7 +100,7 @@ class DeviceCrudApiTest {
     @Test
     @Order(3)
     void model_list() throws Exception {
-        mockMvc.perform(get("/api/iot/device-models")
+        mockMvc.perform(get("/iot/device-models")
                 .param("page", "1")
                 .param("size", "10"))
             .andExpect(status().isOk())
@@ -118,7 +118,7 @@ class DeviceCrudApiTest {
         req.setDescription("已更新");
         req.setVersion(model.getVersion());
 
-        mockMvc.perform(put("/api/iot/device-models/{modelId}", testModelId)
+        mockMvc.perform(put("/iot/device-models/{modelId}", testModelId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
@@ -133,7 +133,7 @@ class DeviceCrudApiTest {
         req.setHeartbeatTimeoutSeconds(99);
         req.setVersion(0); // 旧版本号
 
-        mockMvc.perform(put("/api/iot/device-models/{modelId}", testModelId)
+        mockMvc.perform(put("/iot/device-models/{modelId}", testModelId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict());
@@ -150,7 +150,7 @@ class DeviceCrudApiTest {
         req.setDeviceName("CRUD 测试设备");
         req.setMqttClientId("client-crud-" + System.currentTimeMillis());
 
-        MvcResult result = mockMvc.perform(post("/api/iot/devices")
+        MvcResult result = mockMvc.perform(post("/iot/devices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -176,7 +176,7 @@ class DeviceCrudApiTest {
         req.setMqttClientId(dupMqttId);
 
         // 先注册一个
-        mockMvc.perform(post("/api/iot/devices")
+        mockMvc.perform(post("/iot/devices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated());
@@ -184,7 +184,7 @@ class DeviceCrudApiTest {
         // 再用相同 mqttClientId 注册
         req.setSerialNo("SN-DUP2-" + System.currentTimeMillis());
         req.setDeviceName("dup test 2");
-        mockMvc.perform(post("/api/iot/devices")
+        mockMvc.perform(post("/iot/devices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict())
@@ -194,7 +194,7 @@ class DeviceCrudApiTest {
     @Test
     @Order(12)
     void device_list() throws Exception {
-        mockMvc.perform(get("/api/iot/devices")
+        mockMvc.perform(get("/iot/devices")
                 .param("page", "1")
                 .param("size", "10"))
             .andExpect(status().isOk())
@@ -205,7 +205,7 @@ class DeviceCrudApiTest {
     @Test
     @Order(13)
     void device_detail() throws Exception {
-        mockMvc.perform(get("/api/iot/devices/{deviceId}", testDeviceId))
+        mockMvc.perform(get("/iot/devices/{deviceId}", testDeviceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.deviceId").value(testDeviceId))
@@ -215,7 +215,7 @@ class DeviceCrudApiTest {
     @Test
     @Order(14)
     void device_status() throws Exception {
-        mockMvc.perform(get("/api/iot/devices/{deviceId}/status", testDeviceId))
+        mockMvc.perform(get("/iot/devices/{deviceId}/status", testDeviceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.deviceId").value(testDeviceId))
@@ -234,7 +234,7 @@ class DeviceCrudApiTest {
         req.setVersion(0);
 
         // IotDeviceInstance 没有 version 字段，lifecycle 用状态校验而非乐观锁
-        mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
+        mockMvc.perform(patch("/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
@@ -250,7 +250,7 @@ class DeviceCrudApiTest {
         req.setTargetStatus("ACTIVE");
         req.setVersion(1);
 
-        mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
+        mockMvc.perform(patch("/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
@@ -265,7 +265,7 @@ class DeviceCrudApiTest {
         req.setTargetStatus("RETIRED");
         req.setVersion(2);
 
-        mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
+        mockMvc.perform(patch("/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
@@ -280,7 +280,7 @@ class DeviceCrudApiTest {
         req.setTargetStatus("ACTIVE");
         req.setVersion(3);
 
-        mockMvc.perform(patch("/api/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
+        mockMvc.perform(patch("/iot/devices/{deviceId}/lifecycle-status", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict());
@@ -299,7 +299,7 @@ class DeviceCrudApiTest {
         req.setLocationName("测试区域");
         req.setParkId("P001");
 
-        mockMvc.perform(post("/api/iot/devices/{deviceId}/bindings", testDeviceId)
+        mockMvc.perform(post("/iot/devices/{deviceId}/bindings", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isConflict())
@@ -316,7 +316,7 @@ class DeviceCrudApiTest {
         regReq.setDeviceName("绑定测试设备");
         regReq.setMqttClientId("client-bind-" + System.currentTimeMillis());
 
-        MvcResult regResult = mockMvc.perform(post("/api/iot/devices")
+        MvcResult regResult = mockMvc.perform(post("/iot/devices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(regReq)))
             .andExpect(status().isCreated())
@@ -335,7 +335,7 @@ class DeviceCrudApiTest {
         req.setBuildingId("B001");
         req.setFloorId("F03");
 
-        mockMvc.perform(post("/api/iot/devices/{deviceId}/bindings", bindTestDeviceId)
+        mockMvc.perform(post("/iot/devices/{deviceId}/bindings", bindTestDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -357,7 +357,7 @@ class DeviceCrudApiTest {
         req.setBuildingId("B001");
         req.setFloorId("F03");
 
-        mockMvc.perform(post("/api/iot/devices/{deviceId}/bindings", bindTestDeviceId)
+        mockMvc.perform(post("/iot/devices/{deviceId}/bindings", bindTestDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -365,7 +365,7 @@ class DeviceCrudApiTest {
             .andExpect(jsonPath("$.data.locationId").value("LOC-002"))
             .andExpect(jsonPath("$.data.status").value("ACTIVE"));
 
-        MvcResult historyResult = mockMvc.perform(get("/api/iot/devices/{deviceId}/bindings", bindTestDeviceId))
+        MvcResult historyResult = mockMvc.perform(get("/iot/devices/{deviceId}/bindings", bindTestDeviceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data").isArray())
@@ -383,7 +383,7 @@ class DeviceCrudApiTest {
     @Test
     @Order(23)
     void unbind() throws Exception {
-        mockMvc.perform(delete("/api/iot/devices/{deviceId}/bindings/current", bindTestDeviceId))
+        mockMvc.perform(delete("/iot/devices/{deviceId}/bindings/current", bindTestDeviceId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0));
     }
@@ -398,7 +398,7 @@ class DeviceCrudApiTest {
         regReq.setDeviceName("无绑定设备");
         regReq.setMqttClientId("client-nobind-" + System.currentTimeMillis());
 
-        MvcResult regResult = mockMvc.perform(post("/api/iot/devices")
+        MvcResult regResult = mockMvc.perform(post("/iot/devices")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(regReq)))
             .andExpect(status().isCreated())
@@ -407,7 +407,7 @@ class DeviceCrudApiTest {
         String deviceId = objectMapper.readTree(regResult.getResponse().getContentAsString())
             .get("data").get("deviceId").asText();
 
-        mockMvc.perform(delete("/api/iot/devices/{deviceId}/bindings/current", deviceId))
+        mockMvc.perform(delete("/iot/devices/{deviceId}/bindings/current", deviceId))
             .andExpect(status().isNotFound())
             .andExpect(jsonPath("$.code").value(212007));
     }
@@ -418,7 +418,7 @@ class DeviceCrudApiTest {
     @Order(90)
     void model_delete_with_instances() throws Exception {
         // testModelId 有关联设备，不能删除
-        mockMvc.perform(delete("/api/iot/device-models/{modelId}", testModelId))
+        mockMvc.perform(delete("/iot/device-models/{modelId}", testModelId))
             .andExpect(status().isConflict());
     }
 
@@ -433,7 +433,7 @@ class DeviceCrudApiTest {
         req.setParserCode("simulator");
         req.setHeartbeatTimeoutSeconds(15);
 
-        MvcResult result = mockMvc.perform(post("/api/iot/device-models")
+        MvcResult result = mockMvc.perform(post("/iot/device-models")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
@@ -442,7 +442,7 @@ class DeviceCrudApiTest {
         String delModelId = objectMapper.readTree(result.getResponse().getContentAsString())
             .get("data").get("id").asText();
 
-        mockMvc.perform(delete("/api/iot/device-models/{modelId}", delModelId))
+        mockMvc.perform(delete("/iot/device-models/{modelId}", delModelId))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0));
     }

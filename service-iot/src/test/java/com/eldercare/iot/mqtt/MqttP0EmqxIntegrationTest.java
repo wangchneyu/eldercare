@@ -430,7 +430,7 @@ class MqttP0EmqxIntegrationTest {
 
     private String readOnlineStatus(String deviceId) {
         try {
-            return getJson("/api/iot/devices/" + deviceId + "/status")
+            return getJson("/iot/devices/" + deviceId + "/status")
                     .path("data").path("onlineStatus").asText();
         } catch (Exception e) {
             return null;
@@ -438,7 +438,7 @@ class MqttP0EmqxIntegrationTest {
     }
 
     private void assertStatusEvents(String deviceId, String... expectedEventTypes) throws Exception {
-        JsonNode events = getJson("/api/iot/devices/" + deviceId + "/status-events").path("data");
+        JsonNode events = getJson("/iot/devices/" + deviceId + "/status-events").path("data");
         assertEquals(expectedEventTypes.length, events.size());
         for (int i = 0; i < expectedEventTypes.length; i++) {
             assertEquals(expectedEventTypes[i], events.get(i).path("eventType").asText());

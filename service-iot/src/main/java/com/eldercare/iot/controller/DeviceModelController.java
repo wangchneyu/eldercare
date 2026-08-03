@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
  * 设备型号管理
  */
 @RestController
-@RequestMapping("/api/iot/device-models")
+@RequestMapping("/iot/device-models")
 public class DeviceModelController {
 
     private final IDeviceModelService deviceModelService;

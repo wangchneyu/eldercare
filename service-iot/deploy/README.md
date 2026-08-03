@@ -37,6 +37,25 @@ cd D:\a康养项目\003\eldercare
 mvn -pl service-iot spring-boot:run "-Dspring-boot.run.profiles=dev"
 ```
 
+## Shared Gateway Integration
+
+The Gateway public contract is `/api/iot/v1/**`; its `route-iot` rule rewrites that path to the
+service route `/iot/**` and discovers `service-iot` through Nacos. To make this workstation
+discoverable in the shared network, use the explicit `shared` profile rather than changing the
+local `dev` profile:
+
+```powershell
+cd D:\a康养项目\003\eldercare
+$env:NACOS_SERVER_ADDR = "100.64.0.3:8848"
+$env:NACOS_DISCOVERY_IP = "100.64.0.12"
+mvn -pl service-iot spring-boot:run "-Dspring-boot.run.profiles=shared"
+```
+
+`NACOS_DISCOVERY_IP` must be the current Tailscale address of the machine running IoT. Confirm
+the Nacos namespace, group, authentication requirement, and registration result with the Gateway
+owner before treating the Gateway path as integrated. The shared profile enables discovery only;
+it does not load unconfirmed Nacos configuration.
+
 ## Local RocketMQ Fixture
 
 The separate local RocketMQ fixture is for producer and Outbox recovery verification on a Windows
@@ -75,6 +94,7 @@ the same Outbox record reaches `SENT` with its original envelope.
 | MQTT client ID | `MQTT_CLIENT_ID` | Must be unique per service instance. |
 | RocketMQ NameServer | `ROCKETMQ_NAME_SERVER` | C15 input. Required for 5B only. |
 | Nacos address | `NACOS_SERVER_ADDR` | Required outside the local test profile. |
+| Nacos advertised IP | `NACOS_DISCOVERY_IP` | Set to the service host's reachable Tailscale IP for shared Gateway discovery. |
 | C04 retry retention | `IOT_VITAL_DELIVERY_TERMINAL_RETENTION_HOURS` | Default is 168 hours for terminal C04 failure-only records. |
 | P0 retry controls | `IOT_OUTBOX_RETRY_*` | Tune only with an approved operational change. |
 

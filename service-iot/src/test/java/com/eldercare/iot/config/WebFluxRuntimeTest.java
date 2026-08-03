@@ -37,7 +37,7 @@ class WebFluxRuntimeTest {
                 .thenReturn(new Page<>());
 
         webTestClient.get()
-                .uri("/api/iot/device-models?page=1&size=20")
+                .uri("/iot/device-models?page=1&size=20")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody()
@@ -51,7 +51,7 @@ class WebFluxRuntimeTest {
                 .thenReturn(new Page<>());
 
         webTestClient.get()
-                .uri("/api/iot/device-models?page=1&size=20")
+                .uri("/iot/device-models?page=1&size=20")
                 .header(IotTraceWebFilter.TRACE_ID_HEADER, "rest-trace-001")
                 .exchange()
                 .expectStatus().isOk()
@@ -63,7 +63,7 @@ class WebFluxRuntimeTest {
     @Test
     void missingRouteReturnsNotFoundInsteadOfInternalServerError() {
         webTestClient.get()
-                .uri("/api/iot/missing")
+                .uri("/iot/missing")
                 .exchange()
                 .expectStatus().isNotFound()
                 .expectBody()
