@@ -28,9 +28,9 @@ mqtt:
   username: ${IOT_MQTT_USERNAME:}
   password: ${IOT_MQTT_PASSWORD:}
 
-# RocketMQ（本地 Docker）
+# RocketMQ（默认本地 Docker；可通过环境变量切换至共享 NameServer）
 rocketmq:
-  name-server: 127.0.0.1:9876
+  name-server: ${ROCKETMQ_NAME_SERVER:127.0.0.1:9876}
 
 # 日志级别（开发环境更详细）
 logging:
