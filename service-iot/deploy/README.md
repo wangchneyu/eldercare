@@ -41,20 +41,22 @@ mvn -pl service-iot spring-boot:run "-Dspring-boot.run.profiles=dev"
 
 The Gateway public contract is `/api/iot/v1/**`; its `route-iot` rule rewrites that path to the
 service route `/iot/**` and discovers `service-iot` through Nacos. To make this workstation
-discoverable in the shared network, use the explicit `shared` profile rather than changing the
-local `dev` profile:
+discoverable in the shared network, append the explicit `shared` profile to the local `dev`
+profile. This retains the local PostgreSQL and EMQX configuration while enabling discovery:
 
 ```powershell
 cd D:\a康养项目\003\eldercare
 $env:NACOS_SERVER_ADDR = "100.64.0.3:8848"
 $env:NACOS_DISCOVERY_IP = "100.64.0.12"
-mvn -pl service-iot spring-boot:run "-Dspring-boot.run.profiles=shared"
+$env:ROCKETMQ_NAME_SERVER = "100.64.0.3:9876"
+mvn -pl service-iot spring-boot:run "-Dspring-boot.run.profiles=dev,shared"
 ```
 
 `NACOS_DISCOVERY_IP` must be the current Tailscale address of the machine running IoT. Confirm
 the Nacos namespace, group, authentication requirement, and registration result with the Gateway
 owner before treating the Gateway path as integrated. The shared profile enables discovery only;
-it does not load unconfirmed Nacos configuration.
+it does not load unconfirmed Nacos configuration. Start the local PostgreSQL and EMQX containers
+before this command, as required by the `dev` profile.
 
 ## Local RocketMQ Fixture
 
