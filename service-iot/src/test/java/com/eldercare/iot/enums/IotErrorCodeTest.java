@@ -42,9 +42,8 @@ class IotErrorCodeTest {
         assertEquals(212010, IotErrorCode.DEVICE_MESSAGE_UNDELIVERABLE.getCode());
         assertEquals(HttpStatus.SERVICE_UNAVAILABLE, IotErrorCode.DEVICE_MESSAGE_UNDELIVERABLE.getHttpStatus());
 
-        assertEquals(212015, IotErrorCode.ELDER_NOT_FOUND.getCode());
-        assertEquals("长者不存在或未处于有效状态", IotErrorCode.ELDER_NOT_FOUND.getMsg());
-        assertEquals(HttpStatus.NOT_FOUND, IotErrorCode.ELDER_NOT_FOUND.getHttpStatus());
+        assertEquals(212016, IotErrorCode.DEVICE_VERSION_CONFLICT.getCode());
+        assertEquals(HttpStatus.CONFLICT, IotErrorCode.DEVICE_VERSION_CONFLICT.getHttpStatus());
     }
 
     @Test

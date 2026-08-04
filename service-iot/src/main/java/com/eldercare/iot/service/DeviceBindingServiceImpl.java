@@ -15,7 +15,6 @@ import com.eldercare.iot.enums.LifecycleStatus;
 import com.eldercare.iot.mapper.IotDeviceBindingMapper;
 import com.eldercare.iot.mapper.IotDeviceInstanceMapper;
 import com.eldercare.iot.mapper.IotDeviceModelMapper;
-import com.eldercare.iot.remote.CareClientCaller;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
@@ -43,8 +42,6 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
     private final IotDeviceBindingMapper bindingMapper;
     private final IotDeviceInstanceMapper deviceMapper;
     private final IotDeviceModelMapper modelMapper;
-    private final CareClientCaller careClientCaller;
-
     @Override
     public DeviceBindingVO bind(String deviceId, DeviceBindRequest request) {
         // 1. 加载设备实例，不存在则抛异常
@@ -85,7 +82,6 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
             if (request.getElderId() == null) {
                 throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
             }
-            careClientCaller.validateActiveElder(request.getElderId());
             newBinding.setElderId(request.getElderId());
             newBinding.setParkId(request.getParkId());
             newBinding.setBuildingId(request.getBuildingId());
@@ -160,6 +156,26 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
     }
 
     @Override
+    public void unbindByType(String deviceId, String bindingTypeCode) {
+        BindingType bindingType = parseBindingType(bindingTypeCode);
+        OffsetDateTime now = OffsetDateTime.now();
+        List<IotDeviceBinding> activeBindings = bindingMapper.selectList(
+                new LambdaQueryWrapper<IotDeviceBinding>()
+                        .eq(IotDeviceBinding::getDeviceId, deviceId)
+                        .eq(IotDeviceBinding::getBindingType, bindingType.getCode())
+                        .eq(IotDeviceBinding::getStatus, BindingStatus.ACTIVE.getCode())
+        );
+        if (activeBindings.isEmpty()) {
+            throw new BizException(IotErrorCode.DEVICE_NOT_BOUND);
+        }
+        for (IotDeviceBinding binding : activeBindings) {
+            binding.setStatus(BindingStatus.INACTIVE.getCode());
+            binding.setInactiveAt(now);
+            bindingMapper.updateById(binding);
+        }
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<DeviceBindingVO> getHistory(String deviceId) {
         List<IotDeviceBinding> bindings = bindingMapper.selectList(
@@ -168,6 +184,30 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
                         .orderByDesc(IotDeviceBinding::getCreatedAt)
         );
         return bindings.stream().map(this::toVO).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DeviceBindingVO> getActiveByElderId(Long elderId) {
+        if (elderId == null) {
+            throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
+        }
+        List<IotDeviceBinding> bindings = bindingMapper.selectList(
+                new LambdaQueryWrapper<IotDeviceBinding>()
+                        .eq(IotDeviceBinding::getElderId, elderId)
+                        .eq(IotDeviceBinding::getBindingType, BindingType.ELDER.getCode())
+                        .eq(IotDeviceBinding::getStatus, BindingStatus.ACTIVE.getCode())
+                        .orderByDesc(IotDeviceBinding::getCreatedAt)
+        );
+        return bindings.stream().map(this::toVO).collect(Collectors.toList());
+    }
+
+    private BindingType parseBindingType(String bindingTypeCode) {
+        try {
+            return BindingType.fromCode(bindingTypeCode);
+        } catch (IllegalArgumentException e) {
+            throw new BizException(IotErrorCode.DEVICE_BINDING_INVALID);
+        }
     }
 
     /**

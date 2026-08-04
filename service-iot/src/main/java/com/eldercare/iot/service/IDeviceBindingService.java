@@ -27,10 +27,26 @@ public interface IDeviceBindingService {
     void unbind(String deviceId);
 
     /**
+     * 解绑设备指定类型的当前 ACTIVE 绑定。
+     *
+     * @param deviceId 设备 ID
+     * @param bindingType 绑定类型（ELDER / LOCATION）
+     */
+    void unbindByType(String deviceId, String bindingType);
+
+    /**
      * 查询设备全部绑定历史（按创建时间倒序）。
      *
      * @param deviceId 设备 ID
      * @return 绑定记录列表
      */
     List<DeviceBindingVO> getHistory(String deviceId);
+
+    /**
+     * 查询某个长者当前有效的设备绑定，供管理端退住等流程反查。
+     *
+     * @param elderId 长者 ID
+     * @return 当前有效的 ELDER 绑定记录
+     */
+    List<DeviceBindingVO> getActiveByElderId(Long elderId);
 }

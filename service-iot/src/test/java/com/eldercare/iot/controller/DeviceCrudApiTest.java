@@ -23,6 +23,7 @@ import java.time.OffsetDateTime;
 import static com.eldercare.iot.support.WebTestClientMvcAdapter.*;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * 阶段三验证 — 设备管理 CRUD 全流程 API 测试
@@ -382,6 +383,61 @@ class DeviceCrudApiTest {
 
     @Test
     @Order(23)
+    void bind_elder_and_lookup_active_bindings_by_elder() throws Exception {
+        DeviceBindRequest req = new DeviceBindRequest();
+        req.setBindingType("ELDER");
+        req.setElderId(1001L);
+
+        mockMvc.perform(post("/iot/devices/{deviceId}/bindings", bindTestDeviceId)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(req)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.data.bindingType").value("ELDER"))
+            .andExpect(jsonPath("$.data.elderId").value("1001"));
+
+        MvcResult lookupResult = mockMvc.perform(get("/iot/bindings")
+                .param("elderId", "1001")
+                .param("status", "ACTIVE"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value(0))
+            .andReturn();
+        var activeBindings = objectMapper.readTree(lookupResult.getResponse().getContentAsString()).path("data");
+        boolean deviceFound = false;
+        for (var binding : activeBindings) {
+            deviceFound |= bindTestDeviceId.equals(binding.path("deviceId").asText())
+                    && "ELDER".equals(binding.path("bindingType").asText())
+                    && "ACTIVE".equals(binding.path("status").asText());
+        }
+        assertTrue(deviceFound);
+    }
+
+    @Test
+    @Order(24)
+    void unbind_elder_keeps_location_binding() throws Exception {
+        mockMvc.perform(delete("/iot/devices/{deviceId}/bindings/current/ELDER", bindTestDeviceId))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value(0));
+
+        var bindings = objectMapper.readTree(mockMvc.perform(get("/iot/devices/{deviceId}/bindings", bindTestDeviceId))
+                .andExpect(status().isOk())
+                .andReturn()
+                .getResponse()
+                .getContentAsString())
+            .path("data");
+        boolean elderInactive = false;
+        boolean locationActive = false;
+        for (var binding : bindings) {
+            elderInactive |= "ELDER".equals(binding.path("bindingType").asText())
+                    && "INACTIVE".equals(binding.path("status").asText());
+            locationActive |= "LOCATION".equals(binding.path("bindingType").asText())
+                    && "ACTIVE".equals(binding.path("status").asText());
+        }
+        assertTrue(elderInactive);
+        assertTrue(locationActive);
+    }
+
+    @Test
+    @Order(25)
     void unbind() throws Exception {
         mockMvc.perform(delete("/iot/devices/{deviceId}/bindings/current", bindTestDeviceId))
             .andExpect(status().isOk())
@@ -389,7 +445,7 @@ class DeviceCrudApiTest {
     }
 
     @Test
-    @Order(24)
+    @Order(26)
     void unbind_not_bound() throws Exception {
         // 创建一个没有绑定的设备
         DeviceRegisterRequest regReq = new DeviceRegisterRequest();

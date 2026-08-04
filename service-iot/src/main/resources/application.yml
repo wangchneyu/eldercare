@@ -76,7 +76,6 @@ rocketmq:
     retry-times-when-send-failed: 3
     retry-times-when-send-async-failed: 3
 
-# care-service 长者校验。C07 的按 elderId 查询契约冻结前，仅允许 Mock。
 iot:
   outbox:
     initial-lease-seconds: ${IOT_OUTBOX_INITIAL_LEASE_SECONDS:60}
@@ -89,8 +88,6 @@ iot:
   idempotency:
     ttl-seconds: ${IOT_IDEMPOTENCY_TTL_SECONDS:86400}
     lock-seconds: ${IOT_IDEMPOTENCY_LOCK_SECONDS:30}
-  care-validation:
-    mock-scenario: ${IOT_CARE_MOCK_SCENARIO:active}
   vital-delivery:
     max-age-hours: ${IOT_VITAL_DELIVERY_MAX_AGE_HOURS:24}
     retry:
@@ -101,14 +98,6 @@ iot:
     terminal-retention-hours: ${IOT_VITAL_DELIVERY_TERMINAL_RETENTION_HOURS:168}
     cleanup:
       fixed-delay-ms: ${IOT_VITAL_DELIVERY_CLEANUP_FIXED_DELAY_MS:3600000}
-
-spring.cloud.openfeign:
-  client:
-    config:
-      service-care:
-        connect-timeout: 200
-        read-timeout: 250
-        logger-level: basic
 
 # 日志
 logging:

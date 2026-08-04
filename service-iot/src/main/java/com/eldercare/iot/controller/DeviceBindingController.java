@@ -60,6 +60,22 @@ public class DeviceBindingController {
     }
 
     /**
+     * 解绑设备当前指定类型的绑定。管理端处理长者退住时必须使用 ELDER，保留 LOCATION。
+     */
+    @DeleteMapping("/current/{bindingType}")
+    public R<Void> unbindByType(@PathVariable String deviceId,
+                                @PathVariable String bindingType,
+                                @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+                                ServerHttpRequest httpRequest) {
+        idempotencyService.executeVoid("device-unbind:" + deviceId + ":" + bindingType,
+                idempotencyKey, bindingType, () -> {
+                    deviceBindingService.unbindByType(deviceId, bindingType);
+                    auditLogger.success("DEVICE_UNBIND_" + bindingType, deviceId, httpRequest);
+                });
+        return R.ok(null);
+    }
+
+    /**
      * 查询设备绑定历史
      */
     @GetMapping
