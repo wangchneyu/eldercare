@@ -159,7 +159,8 @@ class DisruptorEventHandlerTest {
 
     @Test
     void vitalSign_parsedOnce_andEnrichedWithElderId() throws Exception {
-        RawDeviceMessage raw = rawMessage("VITAL_SIGN");
+        AtomicInteger acknowledgements = new AtomicInteger();
+        RawDeviceMessage raw = rawMessage("VITAL_SIGN", acknowledgements);
         when(instanceMapper.selectOne(any())).thenReturn(activeInstance());
         when(modelMapper.selectById(1L)).thenReturn(model());
         ParsedVitalSign parsed = new ParsedVitalSign(
@@ -176,6 +177,8 @@ class DisruptorEventHandlerTest {
         verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
         ParsedVitalSign enriched = (ParsedVitalSign) captor.getValue();
         assertEquals(123L, enriched.elderId());
+        assertEquals(1, acknowledgements.get());
+        verify(metrics).mqttMessageAcked("1");
     }
 
     @Test

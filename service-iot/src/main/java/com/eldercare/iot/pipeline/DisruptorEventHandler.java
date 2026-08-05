@@ -136,6 +136,7 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
         // ⑥ 非 P0 消息在成功路由后即可 ack；P0 由 OutboxService 在事务提交后 ack
         if (!(enriched instanceof ParsedSosEvent) && raw.requiresAck()) {
             raw.ackMqtt();
+            metrics.mqttMessageAcked(String.valueOf(raw.mqttQos()));
         }
     }
 
