@@ -14,6 +14,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -64,10 +65,10 @@ class MqttSubscriberTest {
                     "deviceId": "DEV-001",
                     "messageType": "VITAL_SIGN",
                     "protocolVersion": "1.0",
-                    "occurredAt": "2026-07-24T02:30:00Z",
+                    "occurredAt": "%s",
                     "payload": { "heart_rate": 75 }
                 }
-                """;
+                """.formatted(validOccurredAt());
         JsonNode envelope = new com.fasterxml.jackson.databind.ObjectMapper().readTree(payload);
         when(topicRouter.route(topic)).thenReturn(Optional.of(
                 new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
@@ -122,9 +123,9 @@ class MqttSubscriberTest {
                     "deviceId": "DEV-999",
                     "messageType": "VITAL_SIGN",
                     "protocolVersion": "1.0",
-                    "occurredAt": "2026-07-24T02:30:00Z"
+                    "occurredAt": "%s"
                 }
-                """;
+                """.formatted(validOccurredAt());
         when(topicRouter.route(topic)).thenReturn(Optional.of(
                 new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
         JsonNode envelope;
@@ -212,9 +213,9 @@ class MqttSubscriberTest {
                     "deviceId": "DEV-001",
                     "messageType": "VITAL_SIGN",
                     "protocolVersion": "1.0",
-                    "occurredAt": "2026-07-24T02:30:00Z"
+                    "occurredAt": "%s"
                 }
-                """;
+                """.formatted(validOccurredAt());
         when(topicRouter.route(topic)).thenReturn(Optional.of(
                 new TopicRouter.RouteResult("P001", "MATTRESS", "DEV-001", "telemetry")));
         JsonNode envelope;
@@ -247,5 +248,9 @@ class MqttSubscriberTest {
                 topic, payload.getBytes(StandardCharsets.UTF_8), messageId, qos, msg -> acknowledgements.incrementAndGet());
         captor.getValue().handle(inbound);
         return acknowledgements.get();
+    }
+
+    private static String validOccurredAt() {
+        return OffsetDateTime.now().minusSeconds(1).toString();
     }
 }
