@@ -1,5 +1,6 @@
 package com.eldercare.iot.service;
 
+import com.eldercare.common.core.exception.BizException;
 import com.eldercare.iot.dto.request.DeviceBindRequest;
 import com.eldercare.iot.dto.vo.DeviceBindingVO;
 import com.eldercare.iot.entity.IotDeviceBinding;
@@ -18,6 +19,8 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -51,6 +54,24 @@ class DeviceBindingServiceTest {
         assertEquals(1001L, captor.getValue().getElderId());
         assertEquals(BindingStatus.ACTIVE.getCode(), captor.getValue().getStatus());
         assertNotNull(result.getBindingId());
+        assertTrue(result.getBindingId().matches("[1-9]\\d*"));
+    }
+
+    @Test
+    void locationBindingRejectsNonDecimalParkId() {
+        IotDeviceInstance device = new IotDeviceInstance();
+        device.setDeviceId("DEV-001");
+        device.setLifecycleStatus("ACTIVE");
+        when(deviceMapper.selectOne(any())).thenReturn(device);
+
+        DeviceBindRequest request = new DeviceBindRequest();
+        request.setBindingType("LOCATION");
+        request.setParkId("P001");
+        request.setLocationId("LOC-001");
+        request.setLocationType("PUBLIC_AREA");
+        request.setLocationName("Test Area");
+
+        assertThrows(BizException.class, () -> service().bind("DEV-001", request));
     }
 
     @Test

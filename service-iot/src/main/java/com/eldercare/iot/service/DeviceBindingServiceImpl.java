@@ -1,8 +1,8 @@
 package com.eldercare.iot.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.eldercare.common.core.exception.BizException;
-import com.eldercare.common.core.utils.IdUtil;
 import com.eldercare.iot.dto.request.DeviceBindRequest;
 import com.eldercare.iot.dto.vo.DeviceBindingVO;
 import com.eldercare.iot.entity.IotDeviceBinding;
@@ -25,6 +25,7 @@ import org.springframework.util.StringUtils;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /**
@@ -38,6 +39,7 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
 
     private static final Set<String> LOCATION_TYPES = Set.of(
             "ROOM", "CORRIDOR", "PUBLIC_AREA", "BUILDING_ENTRANCE", "OUTDOOR_POINT", "OTHER");
+    private static final Pattern POSITIVE_DECIMAL_ID = Pattern.compile("[1-9]\\d*");
 
     private final IotDeviceBindingMapper bindingMapper;
     private final IotDeviceInstanceMapper deviceMapper;
@@ -89,6 +91,7 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
             newBinding.setRoomNo(request.getRoomNo());
         } else {
             if (!StringUtils.hasText(request.getParkId())
+                    || !POSITIVE_DECIMAL_ID.matcher(request.getParkId()).matches()
                     || !StringUtils.hasText(request.getLocationId())
                     || !StringUtils.hasText(request.getLocationType())
                     || !StringUtils.hasText(request.getLocationName())
@@ -121,7 +124,7 @@ public class DeviceBindingServiceImpl implements IDeviceBindingService {
         }
 
         // 7. 创建新绑定记录
-        newBinding.setBindingId(IdUtil.uuid32());
+        newBinding.setBindingId(String.valueOf(IdWorker.getId()));
         newBinding.setStatus(BindingStatus.ACTIVE.getCode());
         newBinding.setActiveFrom(now);
         newBinding.setCreatedAt(now);

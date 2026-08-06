@@ -168,10 +168,10 @@ class OutboxServiceIntegrationTest {
                 eventId, sourceMessageId, deviceId,
                 OffsetDateTime.parse("2026-07-24T02:30:00Z"),
                 "trace-" + UUID.randomUUID(),
-                "P001", "SOS_BUTTON", eventType,
-                42L, "BIND-ELDER", "B001", "R001", "301",
-                "BIND-LOC",
-                Map.of("locationId", "LOC-001"),
+                "1988123456789012301", "SOS_BUTTON", eventType,
+                42L, "1988123456789012304", "1988123456789012302", "R001", "301",
+                "1988123456789012303",
+                Map.of("locationId", "LOC-001", "locationType", "PUBLIC_AREA", "locationName", "Test Area"),
                 "BUTTON_PRESS", 85, null
         );
     }

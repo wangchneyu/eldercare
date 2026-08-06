@@ -6,30 +6,40 @@
   "additionalProperties": false,
   "required": ["eventId", "eventType", "schemaVersion", "occurredAt", "traceId", "producer", "payload"],
   "properties": {
-    "eventId": { "type": "string", "pattern": "^[0-9]+$" },
+    "eventId": { "type": "string", "minLength": 1, "maxLength": 64 },
     "eventType": { "enum": ["SOS_TRIGGERED", "FALL_DETECTED"] },
     "schemaVersion": { "const": 1 },
     "occurredAt": { "type": "string", "format": "date-time" },
-    "traceId": { "type": "string", "minLength": 1 },
+    "traceId": { "type": "string", "minLength": 1, "maxLength": 64 },
     "producer": { "const": "service-iot@1.0.0" },
     "payload": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["sourceMessageId", "deviceId", "deviceType", "elderId"],
+      "required": ["sourceMessageId", "deviceId", "deviceType", "elderId", "parkId", "locationBindingId", "location", "triggerType"],
       "properties": {
-        "sourceMessageId": { "type": "string", "minLength": 1 },
-        "deviceId": { "type": "string", "minLength": 1 },
-        "deviceType": { "type": "string", "minLength": 1 },
+        "sourceMessageId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "deviceId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "deviceType": { "type": "string", "minLength": 1, "maxLength": 32 },
         "elderId": { "type": ["string", "null"] },
         "bindingId": { "type": ["string", "null"] },
-        "parkId": { "type": ["string", "null"] },
+        "parkId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
         "buildingId": { "type": ["string", "null"] },
         "roomId": { "type": ["string", "null"] },
         "roomNo": { "type": ["string", "null"] },
-        "locationBindingId": { "type": ["string", "null"] },
-        "location": { "type": ["object", "null"], "additionalProperties": true },
-        "triggerType": { "type": ["string", "null"] },
-        "batteryLevel": { "type": ["integer", "null"] }
+        "locationBindingId": { "type": "string", "pattern": "^[1-9][0-9]*$" },
+        "location": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["locationId", "locationType", "locationName"],
+          "properties": {
+            "locationId": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "locationType": { "enum": ["ROOM", "CORRIDOR", "PUBLIC_AREA", "BUILDING_ENTRANCE", "OUTDOOR_POINT", "OTHER"] },
+            "locationName": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "floorId": { "type": ["string", "null"] }
+          }
+        },
+        "triggerType": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "batteryLevel": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 }
       }
     }
   },

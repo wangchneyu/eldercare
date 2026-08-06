@@ -298,7 +298,7 @@ class DeviceCrudApiTest {
         req.setLocationId("LOC-001");
         req.setLocationType("PUBLIC_AREA");
         req.setLocationName("测试区域");
-        req.setParkId("P001");
+        req.setParkId("1988123456789012301");
 
         mockMvc.perform(post("/iot/devices/{deviceId}/bindings", testDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
@@ -332,18 +332,21 @@ class DeviceCrudApiTest {
         req.setLocationId("LOC-001");
         req.setLocationType("PUBLIC_AREA");
         req.setLocationName("三楼活动区");
-        req.setParkId("P001");
+        req.setParkId("1988123456789012301");
         req.setBuildingId("B001");
         req.setFloorId("F03");
 
-        mockMvc.perform(post("/iot/devices/{deviceId}/bindings", bindTestDeviceId)
+        MvcResult bindResult = mockMvc.perform(post("/iot/devices/{deviceId}/bindings", bindTestDeviceId)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isCreated())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.bindingType").value("LOCATION"))
             .andExpect(jsonPath("$.data.bindingId").exists())
-            .andExpect(jsonPath("$.data.status").value("ACTIVE"));
+            .andExpect(jsonPath("$.data.status").value("ACTIVE"))
+            .andReturn();
+        assertTrue(objectMapper.readTree(bindResult.getResponse().getContentAsString())
+                .path("data").path("bindingId").asText().matches("[1-9]\\d*"));
     }
 
     @Test
@@ -354,7 +357,7 @@ class DeviceCrudApiTest {
         req.setLocationId("LOC-002");
         req.setLocationType("PUBLIC_AREA");
         req.setLocationName("三楼康复区");
-        req.setParkId("P001");
+        req.setParkId("1988123456789012301");
         req.setBuildingId("B001");
         req.setFloorId("F03");
 

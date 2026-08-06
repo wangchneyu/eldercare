@@ -72,6 +72,8 @@ import static org.mockito.Mockito.when;
 @EnabledIfSystemProperty(named = "iot.e2e.enabled", matches = "true")
 class MqttP0EmqxIntegrationTest {
 
+    private static final String P0_PARK_ID = "1988123456789012301";
+
     @Autowired
     private MqttConnectionManager connectionManager;
     @Autowired
@@ -329,13 +331,14 @@ class MqttP0EmqxIntegrationTest {
     private IotDeviceBinding createLocationBinding(String deviceId, String locationId, String locationName) {
         IotDeviceBinding binding = new IotDeviceBinding();
         binding.setId(IdWorker.getId());
-        binding.setBindingId("BIND-" + UUID.randomUUID());
+        binding.setBindingId(String.valueOf(IdWorker.getId()));
         binding.setDeviceId(deviceId);
         binding.setBindingType(BindingType.LOCATION.getCode());
         binding.setLocationId(locationId);
         binding.setLocationType("PUBLIC_AREA");
         binding.setLocationName(locationName);
         binding.setFloorId("F03");
+        binding.setParkId(P0_PARK_ID);
         binding.setStatus(BindingStatus.ACTIVE.getCode());
         binding.setActiveFrom(OffsetDateTime.now());
         binding.setCreatedAt(OffsetDateTime.now());
@@ -351,7 +354,7 @@ class MqttP0EmqxIntegrationTest {
     }
 
     private void publishQos1(String deviceId, String messageId) throws Exception {
-        String topic = "elder/P001/SOS_BUTTON/" + deviceId + "/up/event";
+        String topic = "elder/" + P0_PARK_ID + "/SOS_BUTTON/" + deviceId + "/up/event";
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("messageId", messageId);
         payload.put("deviceId", deviceId);

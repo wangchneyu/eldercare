@@ -25,6 +25,7 @@ import org.springframework.util.StringUtils;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * Disruptor 事件处理器 —— 唯一一次解析厂商 payload。
@@ -35,6 +36,8 @@ import java.util.Map;
 @Component
 @RequiredArgsConstructor
 public class DisruptorEventHandler implements EventHandler<IotEvent> {
+
+    private static final Pattern POSITIVE_DECIMAL_ID = Pattern.compile("[1-9]\\d*");
 
     private final IotDeviceInstanceMapper instanceMapper;
     private final IotDeviceModelMapper modelMapper;
@@ -149,10 +152,14 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
 
         Long elderId = null;
         String elderBindingId = null;
-        String parkId = routeParkId;
-        String buildingId = null;
-        String roomId = null;
-        String roomNo = null;
+        String elderParkId = null;
+        String elderBuildingId = null;
+        String elderRoomId = null;
+        String elderRoomNo = null;
+        String locationParkId = null;
+        String locationBuildingId = null;
+        String locationRoomId = null;
+        String locationRoomNo = null;
         String locationBindingId = null;
         Map<String, Object> location = null;
 
@@ -160,20 +167,16 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
             if (BindingType.ELDER.getCode().equals(binding.getBindingType())) {
                 elderId = binding.getElderId();
                 elderBindingId = binding.getBindingId();
-                if (binding.getParkId() != null) {
-                    parkId = binding.getParkId();
-                }
-                buildingId = binding.getBuildingId();
-                roomId = binding.getRoomId();
-                roomNo = binding.getRoomNo();
+                elderParkId = binding.getParkId();
+                elderBuildingId = binding.getBuildingId();
+                elderRoomId = binding.getRoomId();
+                elderRoomNo = binding.getRoomNo();
             } else if (BindingType.LOCATION.getCode().equals(binding.getBindingType())) {
                 locationBindingId = binding.getBindingId();
-                if (StringUtils.hasText(binding.getParkId())) {
-                    parkId = binding.getParkId();
-                }
-                buildingId = binding.getBuildingId();
-                roomId = binding.getRoomId();
-                roomNo = binding.getRoomNo();
+                locationParkId = binding.getParkId();
+                locationBuildingId = binding.getBuildingId();
+                locationRoomId = binding.getRoomId();
+                locationRoomNo = binding.getRoomNo();
                 Map<String, Object> loc = new HashMap<>();
                 loc.put("locationId", binding.getLocationId());
                 loc.put("locationType", binding.getLocationType());
@@ -183,6 +186,13 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
             }
         }
 
+        boolean hasLocationBinding = StringUtils.hasText(locationBindingId);
+        String parkId = hasLocationBinding && StringUtils.hasText(locationParkId)
+                ? locationParkId
+                : StringUtils.hasText(elderParkId) ? elderParkId : routeParkId;
+        String buildingId = hasLocationBinding ? locationBuildingId : elderBuildingId;
+        String roomId = hasLocationBinding ? locationRoomId : elderRoomId;
+        String roomNo = hasLocationBinding ? locationRoomNo : elderRoomNo;
         return new BindingSnapshot(elderId, elderBindingId, parkId, buildingId, roomId, roomNo, locationBindingId, location);
     }
 
@@ -213,7 +223,11 @@ public class DisruptorEventHandler implements EventHandler<IotEvent> {
     }
 
     private boolean hasCompleteLocation(ParsedSosEvent event) {
-        if (!StringUtils.hasText(event.locationBindingId()) || !StringUtils.hasText(event.parkId()) || event.location() == null) {
+        if (!StringUtils.hasText(event.locationBindingId())
+                || !POSITIVE_DECIMAL_ID.matcher(event.locationBindingId()).matches()
+                || !StringUtils.hasText(event.parkId())
+                || !POSITIVE_DECIMAL_ID.matcher(event.parkId()).matches()
+                || event.location() == null) {
             return false;
         }
         return StringUtils.hasText((String) event.location().get("locationId"))

@@ -135,7 +135,7 @@ class OutboxServiceTest {
         OutboxService service = new OutboxService(
                 outboxMapper, sosEventProducer, transactionManager, metrics, restObjectMapper);
         ParsedSosEvent event = new ParsedSosEvent(
-                "EVT-UNBOUND", "msg-unbound", "DEV-UNBOUND", OffsetDateTime.now(), "trace-unbound", "P001",
+                "EVT-UNBOUND", "msg-unbound", "DEV-UNBOUND", OffsetDateTime.now(), "trace-unbound", "1988123456789012301",
                 "SOS_BUTTON", "SOS_TRIGGERED", null, null, null, null, null, null, null,
                 "BUTTON_PRESS", 85, null);
         when(outboxMapper.insertOnConflict(any(IotMqOutbox.class))).thenReturn(1);
@@ -199,9 +199,10 @@ class OutboxServiceTest {
 
     private ParsedSosEvent sosEvent(String eventType) {
         return new ParsedSosEvent(
-                "EVT-001", "msg-1", "DEV-001", OffsetDateTime.now(), "trace-1", "P001", "SOS_BUTTON",
-                eventType, 123L, "BIND-ELDER", "B001", "R001", "301", "BIND-LOC",
-                Map.of("locationId", "LOC-001"), "BUTTON_PRESS", 85, null);
+                "EVT-001", "msg-1", "DEV-001", OffsetDateTime.now(), "trace-1", "1988123456789012301", "SOS_BUTTON",
+                eventType, 123L, "BIND-ELDER", "1988123456789012302", "R001", "301", "1988123456789012303",
+                Map.of("locationId", "LOC-001", "locationType", "PUBLIC_AREA", "locationName", "Test Area"),
+                "BUTTON_PRESS", 85, null);
     }
 
     private void stubTransactionManager() {

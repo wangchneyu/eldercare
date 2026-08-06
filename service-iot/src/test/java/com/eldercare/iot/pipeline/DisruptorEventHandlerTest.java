@@ -199,7 +199,7 @@ class DisruptorEventHandlerTest {
         ArgumentCaptor<ParsedEvent> captor = ArgumentCaptor.forClass(ParsedEvent.class);
         verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
         ParsedSosEvent enriched = (ParsedSosEvent) captor.getValue();
-        assertEquals("BIND-LOC", enriched.locationBindingId());
+        assertEquals("1988123456789012303", enriched.locationBindingId());
         assertEquals("LOC-001", enriched.location().get("locationId"));
     }
 
@@ -223,7 +223,34 @@ class DisruptorEventHandlerTest {
         ParsedSosEvent enriched = (ParsedSosEvent) captor.getValue();
         assertEquals("FALL_DETECTED", enriched.eventType());
         assertEquals(123L, enriched.elderId());
-        assertEquals("BIND-LOC", enriched.locationBindingId());
+        assertEquals("1988123456789012303", enriched.locationBindingId());
+    }
+
+    @Test
+    void locationSnapshotWinsRegardlessOfBindingQueryOrder() throws Exception {
+        RawDeviceMessage raw = rawMessage("SOS");
+        when(instanceMapper.selectOne(any())).thenReturn(activeInstance());
+        when(modelMapper.selectById(1L)).thenReturn(model());
+        ParsedSosEvent parsed = new ParsedSosEvent(
+                raw.eventId(), "msg-1", raw.deviceId(), raw.occurredAt(), raw.traceId(),
+                raw.parkId(), raw.deviceType(), "SOS_TRIGGERED",
+                null, null, null, null, null, null, null, "BUTTON_PRESS", 85, null);
+        DeviceMessageParser parser = mockParser(Optional.of(parsed));
+        when(parserRegistry.getParser("simulator")).thenReturn(Optional.of(parser));
+
+        IotDeviceBinding location = locationBinding();
+        location.setBuildingId("LOCATION-BUILDING");
+        IotDeviceBinding elder = elderBinding();
+        elder.setParkId("OTHER-PARK");
+        when(bindingMapper.selectList(any())).thenReturn(List.of(location, elder));
+
+        handler.onEvent(wrap(raw), 0, false);
+
+        ArgumentCaptor<ParsedEvent> captor = ArgumentCaptor.forClass(ParsedEvent.class);
+        verify(messagePipeline).handle(captor.capture(), eq(raw), eq(null));
+        ParsedSosEvent enriched = (ParsedSosEvent) captor.getValue();
+        assertEquals("LOCATION-BUILDING", enriched.buildingId());
+        assertEquals("1988123456789012303", enriched.locationBindingId());
     }
 
     @Test
@@ -262,10 +289,10 @@ class DisruptorEventHandlerTest {
                     }
                     """).formatted(messageType));
             InboundMqttMessage inbound = acknowledgements == null ? null : new InboundMqttMessage(
-                    "elder/P001/MATTRESS/DEV-001/up/telemetry", null, 1, 1, msg -> acknowledgements.incrementAndGet());
+                    "elder/1988123456789012301/MATTRESS/DEV-001/up/telemetry", null, 1, 1, msg -> acknowledgements.incrementAndGet());
             return new RawDeviceMessage(
-                    "elder/P001/MATTRESS/DEV-001/up/telemetry",
-                    envelope, "P001", "MATTRESS", "DEV-001", messageType,
+                    "elder/1988123456789012301/MATTRESS/DEV-001/up/telemetry",
+                    envelope, "1988123456789012301", "MATTRESS", "DEV-001", messageType,
                     "EVT-001", "trace-001", OffsetDateTime.parse("2026-07-24T02:30:00Z"), 1, 1, inbound);
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -304,9 +331,9 @@ class DisruptorEventHandlerTest {
     private IotDeviceBinding elderBinding() {
         IotDeviceBinding b = new IotDeviceBinding();
         b.setBindingType(BindingType.ELDER.getCode());
-        b.setBindingId("BIND-ELDER");
+        b.setBindingId("1988123456789012304");
         b.setElderId(123L);
-        b.setParkId("P001");
+        b.setParkId("1988123456789012301");
         b.setBuildingId("B001");
         b.setRoomId("R001");
         b.setRoomNo("301");
@@ -317,8 +344,8 @@ class DisruptorEventHandlerTest {
     private IotDeviceBinding locationBinding() {
         IotDeviceBinding b = new IotDeviceBinding();
         b.setBindingType(BindingType.LOCATION.getCode());
-        b.setBindingId("BIND-LOC");
-        b.setParkId("P001");
+        b.setBindingId("1988123456789012303");
+        b.setParkId("1988123456789012301");
         b.setLocationId("LOC-001");
         b.setLocationType("PUBLIC_AREA");
         b.setLocationName("三楼活动区");

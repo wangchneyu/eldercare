@@ -38,6 +38,9 @@ class MessageContractAssetsTest {
         assertEquals("SOS", schema.path("x-rocketmq").path("tagByEventType").path("SOS_TRIGGERED").asText());
         assertEquals("FALL", schema.path("x-rocketmq").path("tagByEventType").path("FALL_DETECTED").asText());
         assertTrue(fixture.path("payload").path("elderId").isNull());
+        assertFalse(schema.path("properties").path("eventId").has("pattern"));
+        assertTrue(fixture.path("payload").path("parkId").asText().matches("[1-9]\\d*"));
+        assertTrue(fixture.path("payload").path("locationBindingId").asText().matches("[1-9]\\d*"));
     }
 
     private JsonNode resource(String path) throws Exception {

@@ -61,6 +61,7 @@ class MqttRocketMq5bIntegrationTest {
 
     private static final String NAME_SERVER_PROPERTY = "rocketmq.name-server";
     private static final String MQTT_BROKER = "tcp://localhost:1883";
+    private static final String C05_PARK_ID = "1988123456789012301";
 
     @Autowired
     private MqttConnectionManager connectionManager;
@@ -164,10 +165,16 @@ class MqttRocketMq5bIntegrationTest {
         assertEquals(sourceMessageId, envelope.path("payload").path("sourceMessageId").asText());
         assertEquals(locationBinding.getBindingId(),
                 envelope.path("payload").path("locationBindingId").asText());
+        assertEquals(C05_PARK_ID, envelope.path("payload").path("parkId").asText());
+        assertTrue(locationBinding.getBindingId().matches("[1-9]\\d*"));
         assertEquals("SOS_TRIGGERED", envelope.path("eventType").asText());
 
-        log.info("Continuous 5B C05 confirmed: sourceMessageId={}, eventId={}, deviceId={}, topic={}, tag={}, status={}",
-                sourceMessageId, outbox.getEventId(), deviceId, outbox.getTopic(), outbox.getTag(), outbox.getStatus());
+        log.info("Continuous 5B C05 confirmed: sourceMessageId={}, eventId={}, traceId={}, deviceId={}, "
+                        + "parkId={}, locationBindingId={}, topic={}, tag={}, status={}",
+                sourceMessageId, outbox.getEventId(), envelope.path("traceId").asText(), deviceId,
+                envelope.path("payload").path("parkId").asText(),
+                envelope.path("payload").path("locationBindingId").asText(),
+                outbox.getTopic(), outbox.getTag(), outbox.getStatus());
     }
 
     private void createActiveDevice(String deviceId, String deviceType) {
@@ -216,6 +223,7 @@ class MqttRocketMq5bIntegrationTest {
         binding.setLocationType("PUBLIC_AREA");
         binding.setLocationName("RocketMQ Continuous Test Location");
         binding.setFloorId("F01");
+        binding.setParkId(C05_PARK_ID);
         assertEquals(1, bindingMapper.insert(binding));
         return binding;
     }
@@ -223,7 +231,7 @@ class MqttRocketMq5bIntegrationTest {
     private IotDeviceBinding baseBinding(String deviceId, String bindingType) {
         IotDeviceBinding binding = new IotDeviceBinding();
         binding.setId(IdWorker.getId());
-        binding.setBindingId("5B-BIND-" + UUID.randomUUID());
+        binding.setBindingId(String.valueOf(IdWorker.getId()));
         binding.setDeviceId(deviceId);
         binding.setBindingType(bindingType);
         binding.setStatus(BindingStatus.ACTIVE.getCode());
@@ -246,7 +254,7 @@ class MqttRocketMq5bIntegrationTest {
     private void publishSos(String deviceId, String sourceMessageId) throws Exception {
         Map<String, Object> envelope = baseEnvelope(sourceMessageId, deviceId, "SOS");
         envelope.put("payload", Map.of("triggerType", "BUTTON_PRESS", "batteryLevel", 85));
-        publish("elder/P001/SOS_BUTTON/" + deviceId + "/up/event", envelope);
+        publish("elder/" + C05_PARK_ID + "/SOS_BUTTON/" + deviceId + "/up/event", envelope);
     }
 
     private Map<String, Object> baseEnvelope(String sourceMessageId, String deviceId, String messageType) {
