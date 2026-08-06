@@ -71,7 +71,8 @@ class C05SosElderAndFall5bIntegrationTest {
     private static final String NAME_SERVER_PROPERTY = "rocketmq.name-server";
     private static final String MQTT_BROKER = "tcp://localhost:1883";
     private static final String C05_PARK_ID = "1988123456789012301";
-    private static final long C05_ELDER_ID = 1001L;
+    private static final long C05_ELDER_ID =
+            Long.parseLong(System.getProperty("iot.rocketmq.5b.sos-fall.elder-id", "1002"));
 
     @Autowired
     private MqttConnectionManager connectionManager;
