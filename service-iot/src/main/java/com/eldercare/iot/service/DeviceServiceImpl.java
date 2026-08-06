@@ -161,7 +161,7 @@ public class DeviceServiceImpl implements IDeviceService {
         wrapper.orderByDesc(IotDeviceInstance::getCreatedAt);
 
         IPage<IotDeviceInstance> page = instanceMapper.selectPage(
-                new Page<>(query.getPage(), query.getSize()), wrapper);
+                new Page<>(query.getPageNo(), query.getPageSize()), wrapper);
 
         // --- 批量加载型号信息用于 VO 填充 ---
         Set<Long> modelIds = page.getRecords().stream()
@@ -401,6 +401,6 @@ public class DeviceServiceImpl implements IDeviceService {
      * 返回空分页结果
      */
     private IPage<DeviceVO> emptyPage(DeviceQuery query) {
-        return new Page<>(query.getPage(), query.getSize(), 0);
+        return new Page<>(query.getPageNo(), query.getPageSize(), 0);
     }
 }

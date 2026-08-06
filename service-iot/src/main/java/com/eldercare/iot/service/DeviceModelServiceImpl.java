@@ -58,7 +58,7 @@ public class DeviceModelServiceImpl implements IDeviceModelService {
     }
 
     @Override
-    public IPage<DeviceModelVO> list(String manufacturer, String deviceType, int page, int size) {
+    public IPage<DeviceModelVO> list(String manufacturer, String deviceType, int pageNo, int pageSize) {
         LambdaQueryWrapper<IotDeviceModel> qw = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(manufacturer)) {
             qw.like(IotDeviceModel::getManufacturer, manufacturer);
@@ -68,7 +68,7 @@ public class DeviceModelServiceImpl implements IDeviceModelService {
         }
         qw.orderByDesc(IotDeviceModel::getCreatedAt);
 
-        Page<IotDeviceModel> pageParam = new Page<>(page, size);
+        Page<IotDeviceModel> pageParam = new Page<>(pageNo, pageSize);
         IPage<IotDeviceModel> entityPage = deviceModelMapper.selectPage(pageParam, qw);
 
         // 转换为 VO 分页

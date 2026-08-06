@@ -13,6 +13,6 @@ public class DeviceQuery {
     private Long modelId;
     private String keyword;
 
-    private Integer page = 1;
-    private Integer size = 20;
+    private Integer pageNo = 1;
+    private Integer pageSize = 20;
 }

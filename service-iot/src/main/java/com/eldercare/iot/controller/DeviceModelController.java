@@ -34,12 +34,12 @@ public class DeviceModelController {
     public R<IPage<DeviceModelVO>> list(
             @RequestParam(required = false) String manufacturer,
             @RequestParam(required = false) String deviceType,
-            @RequestParam(defaultValue = "1") int page,
-            @RequestParam(defaultValue = "20") int size) {
-        if (size > 100) {
-            size = 100;
+            @RequestParam(defaultValue = "1") int pageNo,
+            @RequestParam(defaultValue = "20") int pageSize) {
+        if (pageSize > 100) {
+            pageSize = 100;
         }
-        IPage<DeviceModelVO> result = deviceModelService.list(manufacturer, deviceType, page, size);
+        IPage<DeviceModelVO> result = deviceModelService.list(manufacturer, deviceType, pageNo, pageSize);
         return R.ok(result);
     }
 

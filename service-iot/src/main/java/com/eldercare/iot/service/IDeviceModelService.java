@@ -27,7 +27,7 @@ public interface IDeviceModelService {
      * @param size         每页条数
      * @return 分页结果
      */
-    IPage<DeviceModelVO> list(String manufacturer, String deviceType, int page, int size);
+    IPage<DeviceModelVO> list(String manufacturer, String deviceType, int pageNo, int pageSize);
 
     /**
      * 更新设备型号，使用乐观锁防止并发冲突。

@@ -102,8 +102,8 @@ class DeviceCrudApiTest {
     @Order(3)
     void model_list() throws Exception {
         mockMvc.perform(get("/iot/device-models")
-                .param("page", "1")
-                .param("size", "10"))
+                .param("pageNo", "1")
+                .param("pageSize", "10"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.records").isArray());
@@ -196,8 +196,8 @@ class DeviceCrudApiTest {
     @Order(12)
     void device_list() throws Exception {
         mockMvc.perform(get("/iot/devices")
-                .param("page", "1")
-                .param("size", "10"))
+                .param("pageNo", "1")
+                .param("pageSize", "10"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.records").isArray());
