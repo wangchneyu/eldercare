@@ -108,11 +108,13 @@ class C05HashConflict5bIntegrationTest {
         verificationConsumer.start();
 
         // 第一条：eventId=X, payload A（batteryLevel=86）
+        String locBinding1 = String.valueOf(IdWorker.getId());
+        String locBinding2 = String.valueOf(IdWorker.getId());
         String first = envelope(eventId, traceId, deviceId, "MSG-1-" + UUID.randomUUID(),
-                "1e8793b9-41ac-4272-b09a-4c77e6f66422", "LOC-A-1111111111111111111", 86);
-        // 第二条：同一 eventId，payload 不同（batteryLevel=85、locationName 不同）→ payloadHash 必然不同
+                "1e8793b9-41ac-4272-b09a-4c77e6f66422", locBinding1, 86);
+        // 第二条：同一 eventId，payload 不同（batteryLevel=85、locationName、locationBindingId 不同）→ payloadHash 必然不同
         String second = envelope(eventId, traceId, deviceId, "MSG-2-" + UUID.randomUUID(),
-                "2d64f8a0-52bb-4837-91d5-3a88e6f66423", "LOC-B-2222222222222222222", 85);
+                "2d64f8a0-52bb-4837-91d5-3a88e6f66423", locBinding2, 85);
 
         String hash1 = sha256(first);
         String hash2 = sha256(second);
