@@ -3,6 +3,7 @@ package com.eldercare.iot.mq;
 import com.eldercare.common.core.utils.TraceContext;
 import com.eldercare.iot.metrics.IotMetrics;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.Timer;
 import lombok.RequiredArgsConstructor;
@@ -153,7 +154,11 @@ public class VitalSignProducer {
             payload.put("bed_status", event.bedStatus());
         }
         envelope.put("payload", payload);
-        return objectMapper.writeValueAsString(envelope);
+        // elder_id must stay present even when null (frozen C04 contract, payload.elder_id
+        // is required). Keep this independent from the application's REST NON_NULL setting.
+        return objectMapper.copy()
+                .setSerializationInclusion(JsonInclude.Include.ALWAYS)
+                .writeValueAsString(envelope);
     }
 
     private static String formatIso(OffsetDateTime occurredAt) {
