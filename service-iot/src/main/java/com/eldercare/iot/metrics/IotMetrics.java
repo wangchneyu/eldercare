@@ -197,6 +197,10 @@ public class IotMetrics {
         counter("iot_outbox_sent_cleanup_total").increment(count);
     }
 
+    public void outboxEscalated(long count) {
+        counter("iot_outbox_escalated_total").increment(count);
+    }
+
     private Counter counter(String name, String... tags) {
         return Counter.builder(name).tags(tags).register(meterRegistry);
     }

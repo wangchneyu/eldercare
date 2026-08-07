@@ -3,6 +3,7 @@ package com.eldercare.iot.mapper;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import com.eldercare.iot.config.JsonbTypeHandler;
 import com.eldercare.iot.entity.IotMqOutbox;
+import com.eldercare.iot.entity.IotMqOutboxEscalation;
 import org.apache.ibatis.annotations.*;
 
 import java.time.OffsetDateTime;
@@ -186,4 +187,53 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             )
             """)
     int deleteSentOlderThan(@Param("before") OffsetDateTime before, @Param("limit") int limit);
+
+    /**
+     * C16-3 (frozen): one-shot P0 delivery-window escalation.
+     * <p>
+     * Atomically sets {@code escalated_at}/{@code escalation_reason} on at most
+     * {@code limit} PENDING records with {@code created_at} strictly older than
+     * {@code before} that have never been escalated. The single UPDATE statement
+     * (CTE + {@code FOR UPDATE SKIP LOCKED} + {@code escalated_at IS NULL}) is
+     * multi-instance safe: every record is escalated at most once. It never
+     * touches {@code status}, {@code next_retry_at}, lease or
+     * {@code rawEnvelopeJson}, so the record stays claimable by
+     * {@code claimPendingRecords}.
+     *
+     * @return the escalated audit projection rows (one per record, in creation order)
+     */
+    @Select("""
+            WITH candidate AS (
+                SELECT id FROM iot_mq_outbox
+                WHERE status = 'PENDING'
+                  AND escalated_at IS NULL
+                  AND created_at < #{before}
+                ORDER BY created_at, id
+                LIMIT #{limit}
+                FOR UPDATE SKIP LOCKED
+            )
+            UPDATE iot_mq_outbox o
+            SET escalated_at = #{escalatedAt},
+                escalation_reason = #{reason}
+            FROM candidate
+            WHERE o.id = candidate.id
+            RETURNING o.id, o.event_id, o.device_id, o.event_type, o.created_at,
+                      o.escalated_at, o.retry_count, o.last_error,
+                      o.raw_envelope->>'traceId' AS trace_id
+            """)
+    @Results({
+            @Result(property = "id", column = "id"),
+            @Result(property = "eventId", column = "event_id"),
+            @Result(property = "deviceId", column = "device_id"),
+            @Result(property = "eventType", column = "event_type"),
+            @Result(property = "createdAt", column = "created_at"),
+            @Result(property = "escalatedAt", column = "escalated_at"),
+            @Result(property = "retryCount", column = "retry_count"),
+            @Result(property = "lastError", column = "last_error"),
+            @Result(property = "traceId", column = "trace_id")
+    })
+    List<IotMqOutboxEscalation> escalatePendingOlderThan(@Param("before") OffsetDateTime before,
+                                                         @Param("limit") int limit,
+                                                         @Param("escalatedAt") OffsetDateTime escalatedAt,
+                                                         @Param("reason") String reason);
 }

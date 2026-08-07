@@ -64,4 +64,10 @@ public class IotMqOutbox implements Serializable {
 
     /** 领取该记录的实例标识 */
     private String claimedBy;
+
+    /** C16-3: 一次性超窗升级时间；不改变 status，仅用于审计与告警 */
+    private OffsetDateTime escalatedAt;
+
+    /** C16-3: 升级原因，当前唯一固定值为 DELIVERY_WINDOW_EXCEEDED */
+    private String escalationReason;
 }

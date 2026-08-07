@@ -97,6 +97,15 @@ public class ThreadPoolConfig {
         return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-outbox-cleanup-1"));
     }
 
+    /**
+     * C16-3: one-shot delivery-window escalation is low-priority and must never
+     * share a thread with P0 sending, OutboxRetryTask scanning or value flushing.
+     */
+    @Bean(name = "iotOutboxEscalationScheduler", destroyMethod = "shutdownNow")
+    public ScheduledExecutorService iotOutboxEscalationScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-outbox-escalation-1"));
+    }
+
     @Bean(name = "iotHeartbeatScanScheduler", destroyMethod = "shutdownNow")
     public ScheduledExecutorService iotHeartbeatScanScheduler() {
         return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-heartbeat-scan-1"));

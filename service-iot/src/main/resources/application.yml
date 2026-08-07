@@ -90,6 +90,11 @@ iot:
       batch-size: ${IOT_OUTBOX_SENT_CLEANUP_BATCH_SIZE:500}
       max-batches-per-run: ${IOT_OUTBOX_SENT_CLEANUP_MAX_BATCHES_PER_RUN:10}
       fixed-delay-ms: ${IOT_OUTBOX_SENT_CLEANUP_FIXED_DELAY_MS:3600000}
+    escalation:
+      window-minutes: ${IOT_OUTBOX_ESCALATION_WINDOW_MINUTES:30}
+      batch-size: ${IOT_OUTBOX_ESCALATION_BATCH_SIZE:100}
+      max-batches-per-run: ${IOT_OUTBOX_ESCALATION_MAX_BATCHES_PER_RUN:10}
+      fixed-delay-ms: ${IOT_OUTBOX_ESCALATION_FIXED_DELAY_MS:60000}
   idempotency:
     ttl-seconds: ${IOT_IDEMPOTENCY_TTL_SECONDS:86400}
     lock-seconds: ${IOT_IDEMPOTENCY_LOCK_SECONDS:30}
