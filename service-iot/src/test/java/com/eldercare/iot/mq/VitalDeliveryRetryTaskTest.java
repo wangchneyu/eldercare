@@ -10,7 +10,6 @@ import org.apache.rocketmq.spring.core.RocketMQTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
@@ -65,25 +64,36 @@ class VitalDeliveryRetryTaskTest {
     }
 
     @Test
-    void expiredRecord_isSentToBusinessIsolationTopicAndMarkedQuarantined() {
+    void expiredRecord_isArchivedQuarantinedWithoutPublishingAnyTopic() {
         IotVitalDeliveryOutbox outbox = outbox(true);
         when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), anyString())).thenReturn(List.of(outbox));
-        doAnswer(invocation -> {
-            SendResult result = new SendResult();
-            result.setSendStatus(SendStatus.SEND_OK);
-            invocation.getArgument(2, SendCallback.class).onSuccess(result);
-            return null;
-        }).when(rocketMQTemplate).asyncSend(anyString(), any(Message.class), any(SendCallback.class), anyLong());
         when(outboxMapper.markQuarantined(eq("EVT-1"), anyString(), any())).thenReturn(1);
 
         task.retryPending();
 
-        ArgumentCaptor<Message<String>> messageCaptor = ArgumentCaptor.forClass(Message.class);
-        verify(rocketMQTemplate).asyncSend(eq("elder-vital-delivery-failed:MATTRESS"), messageCaptor.capture(),
-                any(SendCallback.class), eq(3_000L));
-        assertEquals("elder-vital-raw", messageCaptor.getValue().getHeaders().get(VitalDeliveryRetryTask.ORIGINAL_TOPIC_HEADER));
+        // C16-1 (frozen): no RocketMQ send may happen after the delivery window expires.
+        verify(rocketMQTemplate, never()).asyncSend(anyString(), any(Message.class), any(SendCallback.class), anyLong());
+        verify(outboxMapper, never()).markSent(anyString(), anyString(), any());
         verify(outboxMapper).markQuarantined(eq("EVT-1"), anyString(), any());
         verify(metrics).vitalDeliveryQuarantined("MATTRESS");
+    }
+
+    @Test
+    void expiredRecord_keepsRawEnvelopeTraceIdAndLastError() {
+        IotVitalDeliveryOutbox outbox = outbox(true);
+        outbox.setRawEnvelopeJson("{\"eventId\":\"EVT-1\"}");
+        outbox.setTraceId("trace-1");
+        outbox.setLastError("SEND_TIMEOUT: broker down");
+        when(outboxMapper.claimPendingRecords(anyInt(), any(), any(), anyString())).thenReturn(List.of(outbox));
+        when(outboxMapper.markQuarantined(eq("EVT-1"), anyString(), any())).thenReturn(1);
+
+        task.retryPending();
+
+        verify(outboxMapper, never()).recordFailure(anyString(), anyString(), anyInt(), anyString(), any());
+        verify(outboxMapper).markQuarantined(eq("EVT-1"), anyString(), any());
+        assertEquals("{\"eventId\":\"EVT-1\"}", outbox.getRawEnvelopeJson());
+        assertEquals("trace-1", outbox.getTraceId());
+        assertEquals("SEND_TIMEOUT: broker down", outbox.getLastError());
     }
 
     @Test

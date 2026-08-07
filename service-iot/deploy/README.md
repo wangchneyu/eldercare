@@ -69,8 +69,8 @@ cd D:\a康养项目\003\eldercare
 .\service-iot\scripts\start-local-rocketmq.ps1
 ```
 
-It starts a development-only single-master NameServer and Broker, creates `elder-vital-raw`,
-`elder-sos-event`, and `elder-vital-delivery-failed`, and exposes the NameServer at
+It starts a development-only single-master NameServer and Broker, creates `elder-vital-raw`
+and `elder-sos-event`, and exposes the NameServer at
 `127.0.0.1:9876`. `application-dev.yml` already uses that address; another environment only needs
 to override `ROCKETMQ_NAME_SERVER`.
 
@@ -81,7 +81,7 @@ to override `ROCKETMQ_NAME_SERVER`.
 
 Before using it for an application run, make sure no other process occupies `9876`, `10909`,
 `10911`, or `10912`. The Broker deliberately disables automatic topic creation, so the helper
-script creates the three IoT Topics explicitly. To verify a P0 recovery manually, stop only the
+script creates the two IoT Topics explicitly. To verify a P0 recovery manually, stop only the
 Broker, publish an SOS, confirm the local Outbox stays `PENDING`, restart the Broker, and confirm
 the same Outbox record reaches `SENT` with its original envelope.
 

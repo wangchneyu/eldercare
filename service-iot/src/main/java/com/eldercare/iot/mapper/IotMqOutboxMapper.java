@@ -161,4 +161,26 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
             WHERE status = 'PENDING'
             """)
     Long oldestPendingAgeSeconds();
+
+    /**
+     * C16-2 (frozen): low-priority cleanup of terminal P0 records. Only {@code SENT}
+     * records with {@code sent_at} strictly older than the retention cutoff are
+     * deleted. PENDING, FAILED and every other status are never removed here.
+     * <p>
+     * Each call removes at most {@code limit} rows so the task can loop over
+     * bounded batches without a long-running transaction.
+     *
+     * @return number of rows actually deleted in this batch
+     */
+    @Delete("""
+            DELETE FROM iot_mq_outbox
+            WHERE id IN (
+                SELECT id FROM iot_mq_outbox
+                WHERE status = 'SENT'
+                  AND sent_at < #{before}
+                ORDER BY sent_at
+                LIMIT #{limit}
+            )
+            """)
+    int deleteSentOlderThan(@Param("before") OffsetDateTime before, @Param("limit") int limit);
 }

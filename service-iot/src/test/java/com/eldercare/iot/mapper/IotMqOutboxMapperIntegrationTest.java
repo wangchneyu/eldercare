@@ -164,6 +164,77 @@ class IotMqOutboxMapperIntegrationTest {
         outboxMapper.deleteById(pending.getId());
     }
 
+    @Test
+    void deleteSentOlderThan_deletesOnlySentOlderThanCutoff() {
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(30);
+
+        IotMqOutbox oldSent = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(1));
+        IotMqOutbox recentSent = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), OffsetDateTime.now().minusDays(1));
+        IotMqOutbox oldPending = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.PENDING.getCode(), cutoff.minusHours(1));
+        IotMqOutbox oldFailed = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "FALL_DETECTED", "EVT-" + UUID.randomUUID(), OutboxStatus.FAILED.getCode(), cutoff.minusHours(1));
+        assertEquals(1, outboxMapper.insertOnConflict(oldSent));
+        assertEquals(1, outboxMapper.insertOnConflict(recentSent));
+        assertEquals(1, outboxMapper.insertOnConflict(oldPending));
+        assertEquals(1, outboxMapper.insertOnConflict(oldFailed));
+
+        assertEquals(1, outboxMapper.deleteSentOlderThan(cutoff, 100));
+
+        // PENDING / FAILED / recent SENT must survive regardless of age.
+        assertNotNull(outboxMapper.selectById(recentSent.getId()));
+        assertNotNull(outboxMapper.selectById(oldPending.getId()));
+        assertNotNull(outboxMapper.selectById(oldFailed.getId()));
+        assertNull(outboxMapper.selectById(oldSent.getId()));
+
+        outboxMapper.deleteById(recentSent.getId());
+        outboxMapper.deleteById(oldPending.getId());
+        outboxMapper.deleteById(oldFailed.getId());
+    }
+
+    @Test
+    void deleteSentOlderThan_sentAtExactlyAtCutoffIsNotDeleted() {
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(30);
+
+        IotMqOutbox atCutoff = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff);
+        IotMqOutbox justOlder = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusNanos(1_000_000));
+        assertEquals(1, outboxMapper.insertOnConflict(atCutoff));
+        assertEquals(1, outboxMapper.insertOnConflict(justOlder));
+
+        // Strict "sent_at < cutoff": the record at exactly the cutoff survives.
+        assertEquals(1, outboxMapper.deleteSentOlderThan(cutoff, 100));
+        assertNotNull(outboxMapper.selectById(atCutoff.getId()));
+        assertNull(outboxMapper.selectById(justOlder.getId()));
+
+        outboxMapper.deleteById(atCutoff.getId());
+    }
+
+    @Test
+    void deleteSentOlderThan_respectsBatchLimit() {
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(30);
+        IotMqOutbox first = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(1));
+        IotMqOutbox second = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(2));
+        IotMqOutbox third = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(3));
+        assertEquals(1, outboxMapper.insertOnConflict(first));
+        assertEquals(1, outboxMapper.insertOnConflict(second));
+        assertEquals(1, outboxMapper.insertOnConflict(third));
+
+        assertEquals(2, outboxMapper.deleteSentOlderThan(cutoff, 2));
+        assertEquals(1, outboxMapper.deleteSentOlderThan(cutoff, 2));
+        assertEquals(0, outboxMapper.deleteSentOlderThan(cutoff, 2));
+
+        assertNull(outboxMapper.selectById(first.getId()));
+        assertNull(outboxMapper.selectById(second.getId()));
+        assertNull(outboxMapper.selectById(third.getId()));
+    }
+
     private IotMqOutbox newOutbox(String deviceId, String sourceMessageId, String eventType, String eventId) {
         IotMqOutbox outbox = new IotMqOutbox();
         outbox.setId(IdWorker.getId());
@@ -198,6 +269,14 @@ class IotMqOutboxMapperIntegrationTest {
         outbox.setRetryCount(0);
         outbox.setCreatedAt(OffsetDateTime.now());
         outbox.setNextRetryAt(OffsetDateTime.now());
+        return outbox;
+    }
+
+    private IotMqOutbox newOutbox(String deviceId, String sourceMessageId, String eventType,
+                                  String eventId, String status, OffsetDateTime sentAt) {
+        IotMqOutbox outbox = newOutbox(deviceId, sourceMessageId, eventType, eventId);
+        outbox.setStatus(status);
+        outbox.setSentAt(sentAt);
         return outbox;
     }
 }

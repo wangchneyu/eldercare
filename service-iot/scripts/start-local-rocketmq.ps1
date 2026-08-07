@@ -12,8 +12,7 @@ $nameServerContainer = "eldercare-rocketmq-namesrv-local"
 $brokerContainer = "eldercare-rocketmq-broker-local"
 $topics = @(
     "elder-vital-raw",
-    "elder-sos-event",
-    "elder-vital-delivery-failed"
+    "elder-sos-event"
 )
 
 function Invoke-Checked {

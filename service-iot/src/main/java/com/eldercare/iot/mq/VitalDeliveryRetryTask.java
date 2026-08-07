@@ -91,7 +91,7 @@ public class VitalDeliveryRetryTask {
             if (outbox.getRawEnvelopeJson() == null || outbox.getRawEnvelopeJson().isBlank()) {
                 recordFailure(outbox, new IllegalStateException("rawEnvelopeJson is empty"));
             } else if (outbox.getExpiresAt() != null && !now.isBefore(outbox.getExpiresAt())) {
-                publishToIsolationTopic(outbox);
+                quarantineLocally(outbox);
             } else {
                 resendOriginal(outbox);
             }
@@ -108,15 +108,26 @@ public class VitalDeliveryRetryTask {
         });
     }
 
-    private void publishToIsolationTopic(IotVitalDeliveryOutbox outbox) {
-        String destination = MqTopicConstants.VITAL_DELIVERY_FAILED_TOPIC + ":" + outbox.getTag();
-        send(destination, outbox, () -> {
+    /**
+     * C16-1 (frozen): once the delivery window expires the record is archived
+     * locally as QUARANTINED. No RocketMQ Topic is published at all; the original
+     * envelope, eventId, traceId and last error are retained for audit.
+     */
+    private void quarantineLocally(IotVitalDeliveryOutbox outbox) {
+        try {
             int rows = outboxMapper.markQuarantined(outbox.getEventId(), currentInstanceId(), OffsetDateTime.now());
             if (rows > 0) {
                 metrics.vitalDeliveryQuarantined(outbox.getDeviceType());
-                log.error("C04 delivery window expired; original envelope quarantined: eventId={}", outbox.getEventId());
+                log.error("C04 delivery window expired; archived QUARANTINED without publishing: "
+                        + "eventId={}, traceId={}, deviceType={}, lastError={}",
+                        outbox.getEventId(), outbox.getTraceId(), outbox.getDeviceType(), outbox.getLastError());
+            } else {
+                log.warn("C04 quarantine conditional update matched no claim: eventId={}", outbox.getEventId());
             }
-        });
+        } catch (Exception e) {
+            log.error("C04 quarantine update failed: eventId={}", outbox.getEventId(), e);
+            releaseLease(outbox);
+        }
     }
 
     private void send(String destination, IotVitalDeliveryOutbox outbox, Runnable onSuccess) {

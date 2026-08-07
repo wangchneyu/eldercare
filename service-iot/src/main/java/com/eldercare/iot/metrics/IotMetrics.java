@@ -193,6 +193,10 @@ public class IotMetrics {
         log.debug("Outbox lease conflict: eventId={}", eventId);
     }
 
+    public void sentOutboxDeleted(long count) {
+        counter("iot_outbox_sent_cleanup_total").increment(count);
+    }
+
     private Counter counter(String name, String... tags) {
         return Counter.builder(name).tags(tags).register(meterRegistry);
     }

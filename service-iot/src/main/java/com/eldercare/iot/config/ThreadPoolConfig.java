@@ -88,6 +88,15 @@ public class ThreadPoolConfig {
         return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-vital-delivery-retry-1"));
     }
 
+    /**
+     * C16-2: P0 SENT outbox cleanup is low-priority and must never share a thread
+     * with P0 retry scanning or C04 compensation.
+     */
+    @Bean(name = "iotOutboxSentCleanupScheduler", destroyMethod = "shutdownNow")
+    public ScheduledExecutorService iotOutboxSentCleanupScheduler() {
+        return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-outbox-cleanup-1"));
+    }
+
     @Bean(name = "iotHeartbeatScanScheduler", destroyMethod = "shutdownNow")
     public ScheduledExecutorService iotHeartbeatScanScheduler() {
         return Executors.newSingleThreadScheduledExecutor(r -> daemonThread(r, "iot-heartbeat-scan-1"));
