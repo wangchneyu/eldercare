@@ -168,7 +168,9 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
      * deleted. PENDING, FAILED and every other status are never removed here.
      * <p>
      * Each call removes at most {@code limit} rows so the task can loop over
-     * bounded batches without a long-running transaction.
+     * bounded batches without a long-running transaction. The subquery uses
+     * {@code FOR UPDATE SKIP LOCKED} so concurrent instances claim disjoint
+     * batches instead of contending (validated by PostgreSQL integration test).
      *
      * @return number of rows actually deleted in this batch
      */
@@ -180,6 +182,7 @@ public interface IotMqOutboxMapper extends BaseMapper<IotMqOutbox> {
                   AND sent_at < #{before}
                 ORDER BY sent_at
                 LIMIT #{limit}
+                FOR UPDATE SKIP LOCKED
             )
             """)
     int deleteSentOlderThan(@Param("before") OffsetDateTime before, @Param("limit") int limit);

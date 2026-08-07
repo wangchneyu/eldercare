@@ -10,6 +10,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.ActiveProfiles;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +37,9 @@ class IotMqOutboxMapperIntegrationTest {
 
     @Autowired
     private IotMqOutboxMapper outboxMapper;
+
+    @Autowired
+    private DataSource dataSource;
 
     @Test
     void insertOnConflict_duplicateReturnsZeroWithoutException() {
@@ -233,6 +241,58 @@ class IotMqOutboxMapperIntegrationTest {
         assertNull(outboxMapper.selectById(first.getId()));
         assertNull(outboxMapper.selectById(second.getId()));
         assertNull(outboxMapper.selectById(third.getId()));
+    }
+
+    @Test
+    void migration_createsPartialSentCleanupIndex() throws SQLException {
+        try (Connection c = dataSource.getConnection();
+             PreparedStatement ps = c.prepareStatement(
+                     "SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'iot_mq_outbox'");
+             ResultSet rs = ps.executeQuery()) {
+            boolean found = false;
+            while (rs.next()) {
+                String name = rs.getString("indexname");
+                String def = rs.getString("indexdef");
+                if ("idx_outbox_sent_cleanup".equals(name)
+                        && def.contains("(sent_at, id)")
+                        && def.contains("'SENT'::text")) {
+                    found = true;
+                }
+            }
+            assertTrue(found, "partial index idx_outbox_sent_cleanup (sent_at, id) WHERE status='SENT' missing");
+        }
+    }
+
+    @Test
+    void deleteSentOlderThan_forUpdateSkipLocked_skipsRowsLockedByAnotherTransaction() throws SQLException {
+        OffsetDateTime cutoff = OffsetDateTime.now().minusDays(30);
+        IotMqOutbox oldest = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(3));
+        IotMqOutbox second = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(2));
+        IotMqOutbox third = newOutbox("DEV-" + UUID.randomUUID(), "MSG-" + UUID.randomUUID(),
+                "SOS_TRIGGERED", "EVT-" + UUID.randomUUID(), OutboxStatus.SENT.getCode(), cutoff.minusHours(1));
+        assertEquals(1, outboxMapper.insertOnConflict(oldest));
+        assertEquals(1, outboxMapper.insertOnConflict(second));
+        assertEquals(1, outboxMapper.insertOnConflict(third));
+
+        try (Connection other = dataSource.getConnection()) {
+            other.setAutoCommit(false);
+            try (PreparedStatement lock = other.prepareStatement(
+                    "SELECT id FROM iot_mq_outbox WHERE status = 'SENT' ORDER BY sent_at LIMIT 1 FOR UPDATE")) {
+                lock.executeQuery();
+            }
+            // SKIP LOCKED: the row locked by the other transaction is skipped,
+            // the next two are deleted without blocking or failing.
+            assertEquals(2, outboxMapper.deleteSentOlderThan(cutoff, 2));
+            other.rollback();
+        }
+
+        assertNotNull(outboxMapper.selectById(oldest.getId()));
+        assertNull(outboxMapper.selectById(second.getId()));
+        assertNull(outboxMapper.selectById(third.getId()));
+
+        outboxMapper.deleteById(oldest.getId());
     }
 
     private IotMqOutbox newOutbox(String deviceId, String sourceMessageId, String eventType, String eventId) {

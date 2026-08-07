@@ -88,6 +88,7 @@ iot:
     sent-retention-days: ${IOT_OUTBOX_SENT_RETENTION_DAYS:30}
     sent-cleanup:
       batch-size: ${IOT_OUTBOX_SENT_CLEANUP_BATCH_SIZE:500}
+      max-batches-per-run: ${IOT_OUTBOX_SENT_CLEANUP_MAX_BATCHES_PER_RUN:10}
       fixed-delay-ms: ${IOT_OUTBOX_SENT_CLEANUP_FIXED_DELAY_MS:3600000}
   idempotency:
     ttl-seconds: ${IOT_IDEMPOTENCY_TTL_SECONDS:86400}
