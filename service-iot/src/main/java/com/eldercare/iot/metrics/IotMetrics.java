@@ -222,7 +222,7 @@ public class IotMetrics {
 
     private static String failureReason(String reason) {
         return switch (reason) {
-            case "serialization_failure", "send_failure" -> reason;
+            case "serialization_failure", "send_failure", "executor_rejected" -> reason;
             default -> "send_exception";
         };
     }

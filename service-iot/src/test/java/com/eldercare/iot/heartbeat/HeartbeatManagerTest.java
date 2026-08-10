@@ -8,6 +8,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -80,6 +81,23 @@ class HeartbeatManagerTest {
         manager.detectTimeouts(OffsetDateTime.ofInstant(START.plusSeconds(16), ZoneOffset.UTC));
         assertEquals(0, manager.statusCount(OnlineStatus.ONLINE));
         assertEquals(1, manager.statusCount(OnlineStatus.OFFLINE));
+    }
+
+    @Test
+    void publishesOnlyDebouncedTransitionsToTheC09DispatchBoundary() {
+        List<DeviceStatusEvent> published = new ArrayList<>();
+        HeartbeatManager manager = new HeartbeatManager(Clock.fixed(START, ZoneOffset.UTC), published::add);
+
+        manager.recordHeartbeat(heartbeat("trace-online"), 15);
+        manager.recordHeartbeat(heartbeat("trace-still-online"), 15);
+        manager.detectTimeouts(OffsetDateTime.ofInstant(START.plusSeconds(16), ZoneOffset.UTC));
+        manager.detectTimeouts(OffsetDateTime.ofInstant(START.plusSeconds(60), ZoneOffset.UTC));
+        manager.recordHeartbeat(heartbeat("trace-recovered"), 15);
+
+        assertEquals(3, published.size());
+        assertEquals(List.of("ONLINE", "OFFLINE", "RECOVERED"),
+                published.stream().map(DeviceStatusEvent::eventType).toList());
+        assertEquals("trace-recovered", published.get(2).traceId());
     }
 
     private ParsedHeartbeat heartbeat(String traceId) {

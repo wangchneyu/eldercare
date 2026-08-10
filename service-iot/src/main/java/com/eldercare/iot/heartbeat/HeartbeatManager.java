@@ -1,11 +1,13 @@
 package com.eldercare.iot.heartbeat;
 
 import com.eldercare.iot.enums.OnlineStatus;
+import com.eldercare.iot.mq.DeviceStatusProducer;
 import com.eldercare.iot.parser.model.ParsedEvent;
 import com.eldercare.iot.parser.model.ParsedHeartbeat;
 import com.eldercare.iot.parser.model.ParsedSosEvent;
 import com.eldercare.iot.parser.model.ParsedVitalSign;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
@@ -18,6 +20,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * 设备心跳内存状态机。仅由阶段五完成合法设备、生命周期和协议校验后的消息驱动。
@@ -35,13 +38,30 @@ public class HeartbeatManager {
 
     private final AtomicLong versionSequence = new AtomicLong();
     private final Clock clock;
+    private final Consumer<DeviceStatusEvent> statusEventPublisher;
 
+    /**
+     * Keeps direct unit tests and local diagnostic use independent from RocketMQ.
+     * Spring selects the explicitly annotated constructor below for production.
+     */
     public HeartbeatManager() {
-        this(Clock.systemUTC());
+        this(Clock.systemUTC(), ignored -> {
+        });
+    }
+
+    @Autowired
+    public HeartbeatManager(DeviceStatusProducer deviceStatusProducer) {
+        this(Clock.systemUTC(), deviceStatusProducer::publish);
     }
 
     HeartbeatManager(Clock clock) {
+        this(clock, ignored -> {
+        });
+    }
+
+    HeartbeatManager(Clock clock, Consumer<DeviceStatusEvent> statusEventPublisher) {
         this.clock = clock;
+        this.statusEventPublisher = statusEventPublisher;
     }
 
     public Optional<DeviceStatusEvent> recordHeartbeat(ParsedEvent heartbeat, Integer timeoutSeconds) {
@@ -108,7 +128,6 @@ public class HeartbeatManager {
                     now,
                     current.traceId());
             transitions.add(event);
-            publish(event);
             HeartbeatState updated = new HeartbeatState(
                     current.deviceId(),
                     current.deviceType(),
@@ -120,6 +139,7 @@ public class HeartbeatManager {
             dirtyStates.put(deviceId, updated);
             return updated;
         }));
+        transitions.forEach(this::publish);
         return transitions;
     }
 
@@ -189,5 +209,12 @@ public class HeartbeatManager {
         }
         log.info("设备心跳状态变更: deviceId={}, deviceType={}, oldStatus={}, newStatus={}, eventType={}, traceId={}",
                 event.deviceId(), event.deviceType(), event.oldStatus(), event.newStatus(), event.eventType(), event.traceId());
+        try {
+            statusEventPublisher.accept(event);
+        } catch (RuntimeException e) {
+            // C09 是非 P0 的 best-effort 通知，投递问题不能影响已完成的本地状态转换。
+            log.error("设备状态事件投递调度失败，已保留本地状态: deviceId={}, oldStatus={}, newStatus={}, traceId={}",
+                    event.deviceId(), event.oldStatus(), event.newStatus(), event.traceId(), e);
+        }
     }
 }
