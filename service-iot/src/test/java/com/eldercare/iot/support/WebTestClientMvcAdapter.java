@@ -28,11 +28,14 @@ public final class WebTestClientMvcAdapter {
     public ResultActions perform(RequestBuilder request) {
         String uri = UriComponentsBuilder.fromPath(request.path).queryParams(request.parameters).build().toUriString();
         WebTestClient.ResponseSpec response = switch (request.method) {
-            case "GET" -> client.get().uri(uri).exchange();
-            case "DELETE" -> client.delete().uri(uri).exchange();
-            case "POST" -> client.post().uri(uri).contentType(request.contentType).bodyValue(request.body).exchange();
-            case "PUT" -> client.put().uri(uri).contentType(request.contentType).bodyValue(request.body).exchange();
-            case "PATCH" -> client.patch().uri(uri).contentType(request.contentType).bodyValue(request.body).exchange();
+            case "GET" -> client.get().uri(uri).headers(h -> h.addAll(request.headers)).exchange();
+            case "DELETE" -> client.delete().uri(uri).headers(h -> h.addAll(request.headers)).exchange();
+            case "POST" -> client.post().uri(uri).contentType(request.contentType)
+                    .headers(h -> h.addAll(request.headers)).bodyValue(request.body).exchange();
+            case "PUT" -> client.put().uri(uri).contentType(request.contentType)
+                    .headers(h -> h.addAll(request.headers)).bodyValue(request.body).exchange();
+            case "PATCH" -> client.patch().uri(uri).contentType(request.contentType)
+                    .headers(h -> h.addAll(request.headers)).bodyValue(request.body).exchange();
             default -> throw new IllegalArgumentException("Unsupported method: " + request.method);
         };
         return new ResultActions(response.expectBody().returnResult(), objectMapper);
@@ -78,6 +81,7 @@ public final class WebTestClientMvcAdapter {
         private final String method;
         private final String path;
         private final MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
+        private final MultiValueMap<String, String> headers = new LinkedMultiValueMap<>();
         private MediaType contentType = MediaType.APPLICATION_JSON;
         private String body = "";
 
@@ -98,6 +102,11 @@ public final class WebTestClientMvcAdapter {
 
         public RequestBuilder param(String name, String value) {
             parameters.add(name, value);
+            return this;
+        }
+
+        public RequestBuilder header(String name, String value) {
+            headers.add(name, value);
             return this;
         }
     }
@@ -135,12 +144,20 @@ public final class WebTestClientMvcAdapter {
             return hasStatus(201);
         }
 
+        public Expectation isBadRequest() {
+            return hasStatus(400);
+        }
+
         public Expectation isConflict() {
             return hasStatus(409);
         }
 
         public Expectation isNotFound() {
             return hasStatus(404);
+        }
+
+        public Expectation isServerError() {
+            return hasStatus(500);
         }
 
         private Expectation hasStatus(int expected) {
