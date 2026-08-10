@@ -7,7 +7,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-if ($NameServer -match "127\.|localhost") {
+if ($NameServer.Trim() -match '^(?i:(localhost|127(?:\.\d{1,3}){3}|\[?::1\]?))(?::\d+)?$') {
     throw "C09 device-status 5B verification must target the shared RocketMQ NameServer (e.g. 100.64.0.3:9876)."
 }
 

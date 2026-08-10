@@ -33,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BooleanSupplier;
@@ -82,6 +83,7 @@ class C09DeviceStatus5bIntegrationTest {
     private ObjectMapper objectMapper;
 
     private String createdDeviceId;
+    private Long createdModelId;
     private volatile DefaultMQPushConsumer verificationConsumer;
     private final CopyOnWriteArrayList<ReceivedStatusMessage> receivedMessages = new CopyOnWriteArrayList<>();
 
@@ -90,9 +92,12 @@ class C09DeviceStatus5bIntegrationTest {
         String nameServer = System.getProperty(NAME_SERVER_PROPERTY);
         assertNotNull(nameServer,
                 "C09 device-status 5B verification requires -Drocketmq.name-server=<shared-nameserver>:9876");
-        assertTrue(!nameServer.isBlank()
-                        && !nameServer.startsWith("127.")
-                        && !nameServer.startsWith("localhost"),
+        String normalizedNameServer = nameServer == null ? "" : nameServer.trim().toLowerCase();
+        assertTrue(!normalizedNameServer.isBlank()
+                        && !normalizedNameServer.startsWith("127.")
+                        && !normalizedNameServer.startsWith("localhost")
+                        && !normalizedNameServer.startsWith("::1")
+                        && !normalizedNameServer.startsWith("[::1]"),
                 "C09 device-status 5B verification must target a non-loopback shared RocketMQ NameServer");
     }
 
@@ -106,6 +111,9 @@ class C09DeviceStatus5bIntegrationTest {
                     .eq(IotDeviceBinding::getDeviceId, createdDeviceId));
             instanceMapper.delete(new LambdaQueryWrapper<IotDeviceInstance>()
                     .eq(IotDeviceInstance::getDeviceId, createdDeviceId));
+        }
+        if (createdModelId != null) {
+            modelMapper.deleteById(createdModelId);
         }
     }
 
@@ -152,6 +160,7 @@ class C09DeviceStatus5bIntegrationTest {
 
     private void createActiveDevice(String deviceId) {
         Long modelId = IdWorker.getId();
+        createdModelId = modelId;
         IotDeviceModel model = new IotDeviceModel();
         model.setId(modelId);
         model.setModelCode("5B-C09-MODEL-" + UUID.randomUUID());
@@ -226,12 +235,19 @@ class C09DeviceStatus5bIntegrationTest {
     }
 
     private void assertTransition(ReceivedStatusMessage message, String oldStatus, String newStatus,
-                                  long sendAtMs) {
+                                  long sendAtMs) throws Exception {
+        JsonNode body = objectMapper.readTree(message.rawJson);
+        Set<String> frozenFields = Set.of("deviceId", "deviceType", "oldStatus", "newStatus", "occurredAt", "traceId");
+        Set<String> actualFields = new java.util.HashSet<>();
+        body.fieldNames().forEachRemaining(actualFields::add);
+        assertEquals(frozenFields, actualFields, "C09 body must contain exactly the frozen six fields");
         assertEquals(oldStatus, message.oldStatus);
         assertEquals(newStatus, message.newStatus);
         assertEquals(C09_DEVICE_TYPE, message.deviceType);
-        assertNotNull(message.occurredAt, "C09 six-field body must contain occurredAt");
-        assertNotNull(message.traceId, "C09 six-field body must contain traceId");
+        assertTrue(message.occurredAt != null && !message.occurredAt.isBlank(),
+                "C09 six-field body must contain occurredAt");
+        assertTrue(message.traceId != null && !message.traceId.isBlank(),
+                "C09 six-field body must contain traceId");
         assertEquals(message.traceId, message.headerTraceId,
                 "C09 X-Trace-Id header must match the traceId field");
         assertTrue(message.headerTraceId != null && !message.headerTraceId.isBlank(),
