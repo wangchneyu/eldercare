@@ -1,0 +1,94 @@
+# P1-06 Edge Relay 岛自治部署栈：
+#   1) 边缘本地 EMQX（持久会话，承载设备上行 + 护工终端回执）
+#   2) edge-relay（SQLite 离线缓存 + 通知/回执 + 云端补传）
+#   3) telegraf（抓取 Actuator Prometheus 指标上报云端时序库）
+services:
+  edge-emqx:
+    image: emqx/emqx:5.8.8
+    container_name: edge-emqx
+    restart: unless-stopped
+    ports:
+      - "1886:1883"
+      - "18086:18083"
+    environment:
+      EMQX_NODE_NAME: edge-emqx@127.0.0.1
+      EMQX_NODE_COOKIE: edge-cookie
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/emqx/bin/emqx ctl status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - edge-emqx-data:/opt/emqx/data
+      - edge-emqx-log:/opt/emqx/log
+
+  # Local cloud-broker fixture used only for edge-relay recovery verification.
+  # Production replaces this endpoint through EDGE_CLOUD_MQTT_BROKER_URL.
+  cloud-emqx:
+    image: emqx/emqx:5.8.8
+    container_name: edge-cloud-emqx
+    restart: unless-stopped
+    ports:
+      - "1887:1883"
+      - "18087:18083"
+    environment:
+      EMQX_NODE_NAME: cloud-emqx@127.0.0.1
+      EMQX_NODE_COOKIE: cloud-cookie
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/emqx/bin/emqx ctl status"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    volumes:
+      - cloud-emqx-data:/opt/emqx/data
+      - cloud-emqx-log:/opt/emqx/log
+
+  edge-relay:
+    build:
+      context: ../..
+      dockerfile: edge-relay/deploy/Dockerfile
+    container_name: edge-relay
+    restart: unless-stopped
+    depends_on:
+      edge-emqx:
+        condition: service_healthy
+      cloud-emqx:
+        condition: service_healthy
+    ports:
+      - "8091:8091"
+    environment:
+      EDGE_SITE_ID: ${EDGE_SITE_ID:-park-site-01}
+      EDGE_LOCAL_MQTT_BROKER_URL: tcp://edge-emqx:1883
+      EDGE_LOCAL_MQTT_CLIENT_ID: edge-relay-local
+      EDGE_LOCAL_MQTT_AUTO_CONNECT: "true"
+      EDGE_CLOUD_MQTT_BROKER_URL: ${EDGE_CLOUD_MQTT_BROKER_URL:-tcp://cloud-emqx:1883}
+      EDGE_CLOUD_MQTT_CLIENT_ID: edge-relay-cloud
+      EDGE_CLOUD_MQTT_AUTO_CONNECT: "true"
+      EDGE_CAREGIVER_TERMINAL_IDS: ${EDGE_CAREGIVER_TERMINAL_IDS:-caregiver-01}
+      EDGE_SQLITE_PATH: /app/data/edge-relay.db
+      SERVER_PORT: "8091"
+    volumes:
+      - edge-relay-data:/app/data
+
+  telegraf:
+    image: telegraf:1.30
+    container_name: edge-telegraf
+    restart: unless-stopped
+    depends_on:
+      - edge-relay
+    environment:
+      INFLUXDB_URL: ${INFLUXDB_URL:-http://influxdb:8086}
+      INFLUXDB_DATABASE: ${INFLUXDB_DATABASE:-edge_site}
+      INFLUXDB_USER: ${INFLUXDB_USER:-}
+      INFLUXDB_PASSWORD: ${INFLUXDB_PASSWORD:-}
+    volumes:
+      - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+
+volumes:
+  edge-relay-data:
+  edge-emqx-data:
+  edge-emqx-log:
+  cloud-emqx-data:
+  cloud-emqx-log:

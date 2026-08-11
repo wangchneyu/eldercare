@@ -1,0 +1,11 @@
+# 本地开发 profile：本地 EMQX 1886 / 云端 EMQX 1883（由部署环境覆盖）
+edge:
+  site-id: park-dev
+  sqlite:
+    path: ./data/edge-relay-dev.db
+  notification:
+    interval-ms: 2000
+
+logging:
+  level:
+    com.eldercare.edge: DEBUG

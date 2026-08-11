@@ -1,0 +1,25 @@
+# 测试 profile：不连接任何 MQTT Broker，SQLite 使用临时文件
+edge:
+  site-id: park-dev
+  local-mqtt:
+    auto-connect: false
+  cloud-mqtt:
+    auto-connect: false
+  sqlite:
+    path: ${java.io.tmpdir}/edge-relay-test.db
+    max-bytes: 10485760
+    p0-reserve-bytes: 2097152
+    retention-hours: 1
+    cleanup-interval-ms: 3600000
+  forward:
+    interval-ms: 60000
+
+spring:
+  main:
+    banner-mode: "off"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus

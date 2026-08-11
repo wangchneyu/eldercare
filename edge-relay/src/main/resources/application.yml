@@ -1,0 +1,62 @@
+server:
+  port: ${SERVER_PORT:8091}
+
+spring:
+  application:
+    name: edge-relay
+  main:
+    banner-mode: "off"
+  datasource:
+    hikari:
+      maximum-pool-size: 1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: never
+
+edge:
+  site-id: ${EDGE_SITE_ID:park-dev}
+  local-mqtt:
+    broker-url: ${EDGE_LOCAL_MQTT_BROKER_URL:tcp://localhost:1886}
+    client-id: ${EDGE_LOCAL_MQTT_CLIENT_ID:edge-relay-local}
+    username: ${EDGE_LOCAL_MQTT_USERNAME:}
+    password: ${EDGE_LOCAL_MQTT_PASSWORD:}
+    auto-connect: ${EDGE_LOCAL_MQTT_AUTO_CONNECT:true}
+    reconnect-base-seconds: ${EDGE_RECONNECT_BASE_SECONDS:1}
+    reconnect-max-seconds: ${EDGE_RECONNECT_MAX_SECONDS:60}
+  cloud-mqtt:
+    broker-url: ${EDGE_CLOUD_MQTT_BROKER_URL:tcp://localhost:1883}
+    client-id: ${EDGE_CLOUD_MQTT_CLIENT_ID:edge-relay-cloud}
+    username: ${EDGE_CLOUD_MQTT_USERNAME:}
+    password: ${EDGE_CLOUD_MQTT_PASSWORD:}
+    auto-connect: ${EDGE_CLOUD_MQTT_AUTO_CONNECT:true}
+    reconnect-base-seconds: ${EDGE_RECONNECT_BASE_SECONDS:1}
+    reconnect-max-seconds: ${EDGE_RECONNECT_MAX_SECONDS:60}
+  caregiver-terminal-ids: ${EDGE_CAREGIVER_TERMINAL_IDS:caregiver-01}
+  sqlite:
+    path: ${EDGE_SQLITE_PATH:./data/edge-relay.db}
+    max-bytes: ${EDGE_SQLITE_MAX_BYTES:1073741824}
+    p0-reserve-bytes: ${EDGE_SQLITE_P0_RESERVE_BYTES:268435456}
+    retention-hours: ${EDGE_SQLITE_RETENTION_HOURS:24}
+    cleanup-batch-size: ${EDGE_SQLITE_CLEANUP_BATCH_SIZE:500}
+    cleanup-interval-ms: ${EDGE_SQLITE_CLEANUP_INTERVAL_MS:300000}
+  forward:
+    batch-size: ${EDGE_FORWARD_BATCH_SIZE:100}
+    lease-seconds: ${EDGE_FORWARD_LEASE_SECONDS:60}
+    interval-ms: ${EDGE_FORWARD_INTERVAL_MS:2000}
+  notification:
+    interval-ms: ${EDGE_NOTIFY_INTERVAL_MS:10000}
+    batch-size: ${EDGE_NOTIFY_BATCH_SIZE:200}
+  executor:
+    ingress-threads: ${EDGE_INGRESS_THREADS:2}
+    ingress-queue-capacity: ${EDGE_INGRESS_QUEUE_CAPACITY:4096}
+    forward-threads: ${EDGE_FORWARD_THREADS:1}
+
+logging:
+  level:
+    com.eldercare.edge: INFO

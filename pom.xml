@@ -12,6 +12,7 @@
     <modules>
         <module>common</module>
         <module>gateway</module>
+        <module>edge-relay</module>
         <module>service-iot</module>
         <module>service-alert</module>
         <module>service-care</module>
